@@ -1,0 +1,76 @@
+path_patch:  /scratch/shq19004/ProjectCloudDetectionFmask5/TrainingDataCNN512
+path_pixel:  /scratch/shq19004/ProjectCloudDetectionFmask5/TrainingDataPixel1
+path_unet:  /scratch/shq19004/ProjectCloudDetectionFmask5/ModelCNN512CN # CN: Cloud and Non-cloud
+path_rf: /scratch/shq19004/ProjectCloudDetectionFmask5/ModelPixel1   # CN: Cloud and Non-cloud
+
+l8_dataset:  L8BIOME, L8SPARCS, L895CLOUD # training datasets
+l8_predictor_full: coastal, blue, green, red, nir, swir1, swir2, tirs1, tirs2, cirrus, hot, whiteness, ndvi, ndsi, ndbi, sfdi, var_nir, dem, swo # that we can have, also see load_datacube
+l8_predictor_cloud_pixel:  coastal, blue, green, red, nir, swir1, swir2, tirs1, tirs2, cirrus, hot, whiteness, ndvi, ndsi, ndbi, sfdi, var_nir, dem, swo
+l8_predictor_cloud_cnn:  coastal, blue, green, red, nir, swir1, swir2, tirs1, tirs2, cirrus, dem, swo
+l8_predictor_shadow_cnn: nir, swir1, dem
+
+s2_dataset: S2ALCD, S2IRIS, S2WHUCDPLUS # training datasets
+s2_predictor_full: coastal, blue, green, red, vre1, vre2, vre3, wnir, nnir, wv, swir1, swir2, cirrus, hot, whiteness, ndvi, ndsi, ndbi, cdi, sfdi, var_nir, dem, swo # that we can have, also see load_datacube
+s2_predictor_cloud_pixel:  coastal, blue, green, red, vre1, vre2, vre3, wnir, nnir, wv, swir1, swir2, cirrus, hot, whiteness, ndvi, ndsi, ndbi, cdi, sfdi, var_nir, dem, swo
+s2_predictor_cloud_cnn:  coastal, blue, green, red, vre1, vre2, vre3, wnir, nnir, wv, swir1, swir2, cirrus, dem, swo
+s2_predictor_shadow_cnn: nnir, swir1, dem
+
+# convert to lowercase from uppercase below
+scalar:                   float32     # can be 'float64' 'float32'. Scalar type for the pixel value, such as reflectance, cloud probablity, etc.
+
+# Labels
+label_cloud:              4
+label_snow:               3
+label_shadow:             2
+label_water:              1
+label_land:               0
+label_fill:               255
+buffer_cloud:             3
+buffer_shadow:            3
+buffer_snow:              0
+
+# Setups for physical rules derived from Fmask
+random_seed:              42                  # none: dynamic ||| 42 static seed for reproductivity A popular value chosen all over the world for the random state is 42. The reason was a little surprising and quirky. The number simply has been made popular by a comic science fiction called "The Hitchhiker's Guide to the Galaxy" authored by Douglas Adams in 1978
+high_level:               82.5
+low_level:                17.5            # percentiles see Zhu and Curtis, 2012
+min_num_clear:            40000                 # enought number of clear pixels to calculate the cloud prob. then. when potential cloud cover less than 0.1%, directly screen all PCPs out.
+north_lat_gswo:           78
+south_lat_gswo:           -59          # the north and south border of the GSWO, by examining the 30-m product. any pixels within this range, the tool will not use the GSWO layer
+
+# Setups for iteration
+trigger:              unet # can be  randomforest, unet, both
+tuner:                unet # can be  randomforest, unet
+tune_strategy:            transfer     # transfer or new
+tune_seed:                physical     # for random forest only ['disagree', 'physical']
+overlap:                  0.125 # 12.5% overlap between clouds and nonclouds to vary the physical rules
+max_iteration:            2 # maximum iteration numbers between fmask and machine learning model
+seed_level:               50 # percentile of selecting cloud and non-cloud seeds
+physical_rules_dynamic:   true
+update_rate:              0.2 # 20% of the training database will be updated with the randomly samples from the disagreement between machine learning and Fmask. this assumes that the physical rules can improve the cloud detection derived from machine learning model.
+
+# Setups for random forest
+train_pixel_number:       5000 # number of training sample pixels or chips
+train_pixel_cloud:        stratified
+train_pixel_noncloud:     stratified
+
+# Setups for deep learning
+device: cuda # cpu or cuda
+learn_rate_base: 1e-3
+learn_rate_tune: 1e-4
+ratio_test: 0.1 # for testing
+epoch_base : 40 # 40 for Landsat 8 and Sentinel-2
+epoch_tune : 5 # 5 for Landsat 8 and Sentinel-2
+epochs:  120 # for testing
+batch_size: 16
+batch_size_tune: 16
+# image_size: 512
+patch_size: 512
+patch_stride: 488 # for generating patches for training
+patch_stride_classify:  488 # for classifying the whole image
+backbone: resnet34
+save_epoch_point: 1, 5, 10, 20, 40, 60, 80, 100, 120
+decorder_channels: 512, 256, 128, 64, 32
+shuffle:  true
+workers:  2
+prefetch: 2
+continue_train: true

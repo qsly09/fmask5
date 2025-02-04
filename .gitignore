@@ -1,0 +1,35 @@
+# Ignore notebook files
+*.ipynb
+
+# Ignore data files
+*.tif
+*.csv
+*.xlsx
+
+# Ignore the model with large file
+# *.pk
+*.pt
+
+# Ignore SLURM output
+*.out
+*.err
+
+# Ignore figures
+*.svg
+*.png
+*.tif
+
+# Ignore directories
+data/job/
+data/__pycache__/
+data/create_train_data_patch.py
+data/create_train_data_pixel_merge.py
+data/create_train_data_pixel.py
+data/s2iris.py
+model/job/
+model/train_rf_cloud.py
+model/train_unet_cloud.py
+figure/
+validation/
+.ipynb_checkpoints/
+__pycache__/
