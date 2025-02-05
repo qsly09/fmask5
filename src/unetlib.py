@@ -479,9 +479,6 @@ class UNet(object):
             os.rename(path_model + ".part", path_model) # avoid abrupt during saving
 
             # delete the previous epoch's model because it is too large
-            # if not (config['save_epoch_models'] or\
-            #     np.isnan(model_loss_train) or (num_test > 0 and np.isnan(model_loss_test))or\
-            #     np.isnan(model_overall_train) or (num_test > 0 and np.isnan(model_overall_test))):
             if (epoch > 1) and (epoch - 1 not in save_epochs):  # delete the data of the previous one (but store the basic training process info) if which is not asked to be saved
                 path_model_pre = os.path.join(path, f"{basename}_{epoch-1:03d}.pt")
                 epoch_record_pre = epoch_records[epoch - 2].copy() # - 2, as index, is to the previous one

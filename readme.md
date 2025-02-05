@@ -6,7 +6,7 @@ Fmask (Function of mask) is an automated algorithm for detecting clouds and clou
 We are working on detailed installation and usage instructions, which will be available soon.
 
 ## Complete Package
-You can access the full Fmask packages, including all historical versions, from [the mask Google Drive](https://drive.google.com/drive/folders/1LIpHfPSS04reIjKnajniX9xCeVbycW3N?usp=sharing).
+You can download the compelete Fmask packages, including all historical versions, from [the fmask Google Drive](https://drive.google.com/drive/folders/1LIpHfPSS04reIjKnajniX9xCeVbycW3N?usp=sharing).
 
 ## Version History
 ### v5.0.0

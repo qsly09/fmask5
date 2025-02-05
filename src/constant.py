@@ -21,3 +21,10 @@ NORTH_LAT_GSWO, SOUTH_LAT_GSWO = (
 )  # The north and south border of the GSWO, by examining the 30-m product. Any pixels within this range, the tool will not use the GSWO layer
 MSG_BASE = True  # whether to show the base message
 MSG_FULL = True  # whether to show the all message
+
+# below variables are the URLs for the large files such as GSWO, GT30, and UNet model, which cannot be uploaded to the GitHub
+URL_global_gswo150 = "https://drive.google.com/file/d/13JIxS9j1lsxZQnYEgjdhHxk7Z3Cqcbeq/view?usp=drive_link"
+URL_global_gt30 = "https://drive.google.com/file/d/1IhsVi5FKxqEyVs2Vc0F_sg48EIjVekGt/view?usp=drive_link"
+URL_unet_ncf_l7 = "https://drive.google.com/file/d/1A_cd05CvgRzmiXr_nNhg5yHLS5zpzR6t/view?usp=drive_link"
+URL_unet_ncf_l8 = "https://drive.google.com/file/d/1yysrwxgk8Y6IHPTnvIFHChEEgEfrZTow/view?usp=drive_link"
+URL_unet_ncf_s2 = "https://drive.google.com/file/d/1GpwtS5cZ90NvmLvrtD9jT8X7vCQKd6i_/view?usp=drive_link"
