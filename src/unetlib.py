@@ -4,7 +4,6 @@
 # pylint: disable=line-too-long
 # pylint: disable=no-member
 import os
-import sys
 import numpy as np
 import random
 from osgeo import gdal_array
@@ -16,6 +15,7 @@ from pathlib import Path
 from utils import normalize_datacube
 import time
 import constant as C
+np.seterr(invalid='ignore') # ignore the invalid errors
 
 
 class Dataset(BaseDataset):
@@ -513,8 +513,6 @@ class UNet(object):
         Returns:
             image_class, image_prob: class result (0: noncloud, 1: cloud, and 2: filled) and probability result
         """
-        if C.MSG_FULL:
-            print(">>> classifying image by unet")
         # check the probability index
         if probability == "default":
             prob_index = -1
@@ -528,7 +526,10 @@ class UNet(object):
             datacube = normalize_datacube(
                 self.image.data.get(self.predictors), obsmask=self.image.obsmask
             )
-
+    
+        if C.MSG_FULL:
+            print(">>> classifying image by unet")
+    
         # Convert the datacube to tensor if it is not
         if not isinstance(datacube, torch.Tensor):
             datacube = torch.from_numpy(datacube).to(

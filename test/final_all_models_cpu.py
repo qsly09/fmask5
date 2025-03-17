@@ -44,7 +44,7 @@ import time
     "-r",
     type=str,
     help="The resource directory of Landsat/Sentinel-2 data. It supports a directory which contains mutiple images",
-    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat89",
+    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat89/",
 )
 @click.option(
     "--destination",
@@ -74,13 +74,14 @@ def main(resource, destination, ci, cn, skip) -> None:
     
     # Loop through the images
     for path_image in path_image_list:
+        print()  # Prints a new line before the progress update
         image_name = Path(path_image).stem
         if "OPER_PRD_" in image_name:
-            print(f">>> {image_name} is not a valid image")
+            print(f"{image_name} is not a valid image")
             print(">>> skipping...")
             continue
         if ("LO08_" in image_name) or ("LO09_" in image_name):
-            print(f">>> {image_name} is not a valid image (lack of thermal band)")
+            print(f"{image_name} is not a valid image (lack of thermal band)")
             print(">>> skipping...")
             continue
         
@@ -95,8 +96,7 @@ def main(resource, destination, ci, cn, skip) -> None:
             fmask = Fmask(path_image, algorithm = "physical")
             fmask.load_image()
             fmask.mask_cloud()
-            fmask.create_cloud_object(postprocess = 'morphology') 
-            fmask.mask_shadow()
+            fmask.mask_shadow(postprocess='morphology', min_area=3, potential = "flood")
             # save the mask
             fmask.image.destination = destination # force to alter the destination as required
             fmask.save_mask(endname = end_key) # save the mask
@@ -111,7 +111,9 @@ def main(resource, destination, ci, cn, skip) -> None:
                                 title = 'Color composite image',
                                 percentiles = [10, 90],
                                 path = os.path.join(destination, fmask.image.name + '_SNR.png'))
+            print(f"Finished with {((time.perf_counter() - time_start)/60): 0.2f} mins")
 
+   
         ############### LightGBM ################
         end_key = "GBM"
         if skip and os.path.exists(os.path.join(destination, image_name+ f'_{end_key}.png')):
@@ -123,14 +125,13 @@ def main(resource, destination, ci, cn, skip) -> None:
             fmask = Fmask(path_image, algorithm = "lightgbm")
             fmask.load_image()
             fmask.mask_cloud()
-            fmask.physical.init_cloud_probability() # force to start from the beginning of the cloud probability, since we do not have the cloud probability from the previous steps
-            fmask.create_cloud_object(postprocess = 'morphology') 
-            fmask.mask_shadow()
+            fmask.physical.init_constant_filter() # force to start generate simple masks for snow and water, and the base information for further shadow masking
+            fmask.mask_shadow(postprocess='morphology', min_area=3, potential = "flood")
             fmask.image.destination = destination # force to alter the destination as required
             fmask.save_mask(endname = end_key) # save the mask
             fmask.save_model_metadata(os.path.join(destination, fmask.image.name + f'_{end_key}_meta.csv'), running_time=time.perf_counter() - time_start)
             fmask.display_fmask(path = os.path.join(destination, fmask.image.name + f'_{end_key}.png'))
-        
+            print(f"Finished with {((time.perf_counter() - time_start)/60): 0.2f} mins")
         
         ############### UNet ################
         end_key = "UNT"
@@ -143,16 +144,16 @@ def main(resource, destination, ci, cn, skip) -> None:
             fmask = Fmask(path_image, algorithm = "unet")
             fmask.load_image()
             fmask.mask_cloud()
-            fmask.physical.init_cloud_probability() # force to start from the beginning of the cloud probability, since we do not have the cloud probability from the previous steps
-            fmask.create_cloud_object(postprocess = "none") 
-            fmask.mask_shadow()
+            fmask.physical.init_constant_filter() # force to start generate simple masks for snow and water, and the base information for further shadow masking
+            fmask.mask_shadow(postprocess='none', min_area=0, potential = "flood")
             fmask.image.destination = destination # force to alter the destination as required
             fmask.save_mask(endname = end_key) # save the mask
             fmask.save_model_metadata(os.path.join(destination, fmask.image.name + f'_{end_key}_meta.csv'), running_time=time.perf_counter() - time_start)
             fmask.display_fmask(path = os.path.join(destination, fmask.image.name + f'_{end_key}.png'))
+            print(f"Finished with {((time.perf_counter() - time_start)/60): 0.2f} mins")
         
-        ############### Physical GBM ################
-        end_key = "PGG"
+        ############### LightGBM Physical LightGBM ################
+        end_key = "LPL"
         if skip and os.path.exists(os.path.join(destination, image_name+ f'_{end_key}.png')):
             print(f"Skip {path_image}")
         else:
@@ -162,15 +163,15 @@ def main(resource, destination, ci, cn, skip) -> None:
             fmask = Fmask(path_image, algorithm = "interaction", base = "lightgbm", tune = "lightgbm")
             fmask.load_image()
             fmask.mask_cloud()
-            fmask.create_cloud_object(postprocess = 'morphology') 
-            fmask.mask_shadow()
+            fmask.mask_shadow(postprocess='morphology', min_area=3, potential = "flood")
             fmask.image.destination = destination # force to alter the destination as required
             fmask.save_mask(endname = end_key) # save the mask
             fmask.save_model_metadata(os.path.join(destination, fmask.image.name + f'_{end_key}_meta.csv'), running_time=time.perf_counter() - time_start)
             fmask.display_fmask(path = os.path.join(destination, fmask.image.name + f'_{end_key}.png'))
+            print(f"Finished with {(time.perf_counter() - time_start)/60: 0.2f} mins")
         
-        ############### Physical UNet-GBM ################
-        end_key = "PUG"
+        ############### UNet Physical LightGBM ################
+        end_key = "UPL"
         if skip and os.path.exists(os.path.join(destination, image_name+ f'_{end_key}.png')):
             print(f"Skip {path_image}")
         else:
@@ -180,12 +181,12 @@ def main(resource, destination, ci, cn, skip) -> None:
             fmask = Fmask(path_image, algorithm = "interaction", base = "unet", tune = "lightgbm")
             fmask.load_image()
             fmask.mask_cloud()
-            fmask.create_cloud_object(postprocess = 'unet') 
-            fmask.mask_shadow()
+            fmask.mask_shadow(postprocess='unet', min_area=0, potential = "flood")
             fmask.image.destination = destination # force to alter the destination as required
             fmask.save_mask(endname = end_key) # save the mask
             fmask.save_model_metadata(os.path.join(destination, fmask.image.name + f'_{end_key}_meta.csv'), running_time=time.perf_counter() - time_start)
             fmask.display_fmask(path = os.path.join(destination, fmask.image.name + f'_{end_key}.png'))
+            print(f"Finished with {(time.perf_counter() - time_start)/60: 0.2f} mins")
 
 # main port to run the fmask by command line
 if __name__ == "__main__":

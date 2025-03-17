@@ -2,11 +2,11 @@
 #SBATCH -J f_gpu
 #SBATCH --partition=general-gpu
 #SBATCH --constraint=a100
-#SBATCH --mem-per-cpu=50G
+#SBATCH --mem-per-cpu=15G
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --array 1-55
+#SBATCH --array 1-11
 #SBATCH -o log/%x-out-%A_%4a.out
 #SBATCH -e log/%x-err-%A_%4a.err
 

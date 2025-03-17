@@ -9,13 +9,22 @@ License: MIT
 Website: https://github.com/gersl/fmask
 
 Description:
-This script runs Fmask 5.0 for cloud detection in parallel for multiple images using the following models on CPU:
+This script runs Fmask 5.0 for cloud detection, supporting both Landsat 4-9 and Sentinel-2 data.
+The script can process either a single image or an entire directory of images, distributing tasks across multiple cores for efficient processing.
+
+This script runs Fmask 5.0 for cloud detection.
+It supports both Landsats 4-9 and Sentinel-2 data.
+The script is designed to run on a cluster with multiple cores, with the custumized ci and cn.
+The script can be run on a single image or a directory containing multiple images.
+The script will divide the tasks into different cores.
+The script supports the following algorithms:
 - Physical (i.e., Fmask 4.6) (CPU)
 - LightGBM (CPU)
 - UNet (CPU and GPU)
-- Physical GBM (CPU)
-- Physical UNet (GPU only)
-- Physical UNet-GBM (CPU and GPU) (default)
+- LPL: LightGBM-Physical-LightGBM (CPU)
+- UPU: UNet-Physical-UNet  (GPU only)
+- LPU: LightGBM-Physical-UNet (GPU only)
+- UPL: UNet-Physical-LightGBM (CPU and GPU) (default)
 
 Changelog:
 - 5.0.0 (2024-11-12): Initial release.
@@ -31,12 +40,12 @@ import sys
 import os
 import glob
 from pathlib import Path
+import click
+import time
 sys.path.append(
     str(Path(__file__).parent.parent.joinpath("src"))
 )
 from fmasklib import Fmask
-import click
-import time
 
 @click.command()
 @click.option(
@@ -44,18 +53,18 @@ import time
     "-r",
     type=str,
     help="The resource directory of Landsat/Sentinel-2 data. It supports a directory which contains mutiple images",
-    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat89",
+    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/",
 )
 @click.option(
     "--destination",
     "-d",
     type=str,
     help="The destination directory. If not provided, the results will be saved in the resource directory",
-    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat89MaskCPU_Post",
+    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/",
 )
 @click.option("--ci", "-i", type=int, help="The core's id", default=1)
 @click.option("--cn", "-n", type=int, help="The number of cores", default=1)
-@click.option("--skip", "-s", type=int, help="skip processing the image when its result exists", default=0)
+@click.option("--skip", "-s", is_flag = True, help="Skip processing the image when its result exists. (default: False)", default=False)
 def main(resource, destination, ci, cn, skip) -> None:
     """main function to start fmask
 
@@ -68,10 +77,12 @@ def main(resource, destination, ci, cn, skip) -> None:
 
     # Create  image list
     path_image_list  = sorted(glob.glob(os.path.join(resource, '[L|S]*')))
+    # Select the image folders to process
+    path_image_list = [path_image for path_image in path_image_list if os.path.isdir(path_image)]
     # Divide the tasks into different cores
     path_image_list = [path_image_list[i] for i in range(ci - 1, len(path_image_list), cn)] # ci - 1 is the index
     print(f"Core {ci}/{cn}: Processing a total of {len(path_image_list)} images")
-    
+   
     # Loop through the images
     for path_image in path_image_list:
         image_name = Path(path_image).stem
@@ -84,8 +95,8 @@ def main(resource, destination, ci, cn, skip) -> None:
             print(">>> skipping...")
             continue
 
-        ############### Physical UNet-GBM ################
-        end_key = "PUG"
+        ############### UNet-Physical-LightGBM ################
+        end_key = "UPL"
         if skip and os.path.exists(os.path.join(destination, image_name+ f'_{end_key}.png')):
             print(f"Skip {path_image}")
         else:
@@ -93,6 +104,7 @@ def main(resource, destination, ci, cn, skip) -> None:
             # start the timer
             time_start = time.perf_counter()
             fmask = Fmask(path_image, algorithm = "interaction", base = "unet", tune = "lightgbm")
+            fmask.buffer_cloud = 3 # set the buffer cloud to 3
             fmask.load_image()
             fmask.mask_cloud()
             fmask.create_cloud_object(postprocess = 'unet')

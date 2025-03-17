@@ -96,15 +96,14 @@ def main(resource, destination, ci, cn, skip) -> None:
             fmask.load_image()
             fmask.mask_cloud()
             fmask.physical.init_cloud_probability() # force to start from the beginning of the cloud probability, since we do not have the cloud probability from the previous steps
-            fmask.create_cloud_object(postprocess = 'none') 
-            fmask.mask_shadow()
+            fmask.mask_shadow(postprocess='none', min_area=0, potential = "flood")
             fmask.image.destination = destination # force to alter the destination as required
             fmask.save_mask(endname = end_key) # save the mask
             fmask.save_model_metadata(os.path.join(destination, fmask.image.name + f'_{end_key}_meta.csv'), running_time=time.perf_counter() - time_start)
             fmask.display_fmask(path = os.path.join(destination, fmask.image.name + f'_{end_key}.png'))
         
-        ############### Physical UNet ################
-        end_key = "PUU"
+        ############### UNet Physical UNet ################
+        end_key = "UPU"
         if skip and os.path.exists(os.path.join(destination, image_name+ f'_{end_key}.png')):
             print(f"Skip {path_image}")
         else:
@@ -114,16 +113,15 @@ def main(resource, destination, ci, cn, skip) -> None:
             fmask = Fmask(path_image, algorithm = "interaction", base = "unet", tune = "unet")
             fmask.load_image()
             fmask.mask_cloud()
-            fmask.create_cloud_object(postprocess = 'none') 
-            fmask.mask_shadow()
+            fmask.mask_shadow(postprocess='none', min_area=0, potential = "flood")
             fmask.image.destination = destination # force to alter the destination as required
             fmask.save_mask(endname = end_key) # save the mask
             fmask.save_model_metadata(os.path.join(destination, fmask.image.name + f'_{end_key}_meta.csv'), running_time=time.perf_counter() - time_start)
             fmask.display_fmask(path = os.path.join(destination, fmask.image.name + f'_{end_key}.png'))
     
     
-        ############### Physical UNet-GBM ################
-        end_key = "PUG"
+        ############### UNet Physical LightGBM ################
+        end_key = "UPL"
         if skip and os.path.exists(os.path.join(destination, image_name+ f'_{end_key}.png')):
             print(f"Skip {path_image}")
         else:
@@ -133,15 +131,14 @@ def main(resource, destination, ci, cn, skip) -> None:
             fmask = Fmask(path_image, algorithm = "interaction", base = "unet", tune = "lightgbm")
             fmask.load_image()
             fmask.mask_cloud()
-            fmask.create_cloud_object(postprocess = 'unet') 
-            fmask.mask_shadow() # overlap the final cloud mask over the base unet cloud layer to reduce the false positive over bright surfaces 
+            fmask.mask_shadow(postprocess='unet', min_area=0, potential = "flood")
             fmask.image.destination = destination # force to alter the destination as required
             fmask.save_mask(endname = end_key) # save the mask
             fmask.save_model_metadata(os.path.join(destination, fmask.image.name + f'_{end_key}_meta.csv'), running_time=time.perf_counter() - time_start)
             fmask.display_fmask(path = os.path.join(destination, fmask.image.name + f'_{end_key}.png'))
         
-        ############### Physical UNet-GBM ################
-        end_key = "PGU"
+        ############### LightGBM Physical UNet ################
+        end_key = "LPU"
         if skip and os.path.exists(os.path.join(destination, image_name+ f'_{end_key}.png')):
             print(f"Skip {path_image}")
         else:
@@ -151,8 +148,7 @@ def main(resource, destination, ci, cn, skip) -> None:
             fmask = Fmask(path_image, algorithm = "interaction", base = "lightgbm", tune = "unet")
             fmask.load_image()
             fmask.mask_cloud()
-            fmask.create_cloud_object(postprocess = 'none') 
-            fmask.mask_shadow()
+            fmask.mask_shadow(postprocess='none', min_area=0, potential = "flood")
             fmask.image.destination = destination # force to alter the destination as required
             fmask.save_mask(endname = end_key) # save the mask
             fmask.save_model_metadata(os.path.join(destination, fmask.image.name + f'_{end_key}_meta.csv'), running_time=time.perf_counter() - time_start)

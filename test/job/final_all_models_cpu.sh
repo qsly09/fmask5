@@ -2,13 +2,12 @@
 #SBATCH -J f_cpu
 #SBATCH --partition=general
 #SBATCH --constraint='epyc128' # Target the AMD Epyc node architecture 
-#SBATCH --mem-per-cpu=30G
+#SBATCH --mem-per-cpu=15G
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --array 1-300
+#SBATCH --array 1-120
 #SBATCH -o log/%x-out-%A_%4a.out
 #SBATCH -e log/%x-err-%A_%4a.err
-
 
 . "/home/shq19004/miniconda3/etc/profile.d/conda.sh"  # startup conda
 conda activate fmask 

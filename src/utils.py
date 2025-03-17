@@ -33,7 +33,25 @@ from matplotlib.colors import ListedColormap
 import constant as C
 from scipy.ndimage import convolve
 
-# Functions of index calculation
+# ignore the invalid errors
+np.seterr(invalid='ignore') 
+
+# Use non-GUI backend only if running in Jupyter Notebook
+# Prevents X server errors when running in a headless environment
+def is_running_in_jupyter():
+    """Check if the script is running inside a Jupyter Notebook."""
+    try:
+        from IPython import get_ipython
+        return get_ipython() is not None
+    except ImportError:
+        return False
+if is_running_in_jupyter():
+    mpl.use('TkAgg')
+else:
+    mpl.use('Agg')
+
+
+# Functions of index calculationg
 def ndvi(red, nir):
     """Normalized Difference Vegetation Index
 
@@ -321,6 +339,36 @@ def gen_dem(profile, des=None):
     path_dem = os.path.join(Path(__file__).parent.parent, "data", "global_gt30.tif")
     return warp2like(src=path_dem, like=profile, des=des)
 
+def gen_slope(profile, des=None):
+    """
+    Generate a slope raster based on the given profile.
+    This function loads a global slope dataset (gtopo30-slope) and warps it to match the given profile.
+    Args:
+        profile (dict): The profile (metadata) of the target raster to match.
+        des (str, optional): The destination path to save the warped raster. If None, the result is returned as an array.
+    Returns:
+        numpy.ndarray or None: The warped slope raster as a numpy array if `des` is None, otherwise None.
+    """
+
+    if C.MSG_FULL:
+        print(">>> loading gtopo30-slope")
+    return warp2like(src=os.path.join(Path(__file__).parent.parent, "data", "global_gt30_slope.tif"), like=profile, des=des)/100
+
+def gen_aspect(profile, des=None):
+    """
+    Generates an aspect raster that matches the given profile.
+    Parameters:
+    profile (dict): The profile dictionary containing metadata for the raster.
+    des (str, optional): The destination path for the output raster. Defaults to None.
+    Returns:
+    ndarray: The aspect raster aligned with the given profile.
+    """
+
+    if C.MSG_FULL:
+        print(">>> loading gtopo30-aspect")
+    return warp2like(src=os.path.join(Path(__file__).parent.parent, "data", "global_gt30_aspect.tif"), like=profile, des=des)/100
+    
+
 def gen_gswo(profile, des=None):
     """
     Generate a global surface water mask.
@@ -348,6 +396,54 @@ def gen_gswo(profile, des=None):
     if swo is not None:
         swo[swo == 255] = 100  # 255 is 100% ocean.
     return swo
+
+def topo_correct_scs(band_ori1, band_ori2, sun_elevation_deg, sun_azimuth_deg, slope_data, aspect_data):
+    """
+    Applies topographic correction SCS to the input band data.
+    The SCS correction is equivalent to projecting the sunlit canopy from the sloped surface to the horizontal surface in the direction of illumination (Gu, D. et al., 1998).
+
+    Parameters:
+        band_ori (numpy.ndarray): Original band data (2D array).
+        sun_elevation_deg (float): Solar elevation angle in degrees (number).
+        sun_azimuth_deg (float): Solar azimuth angle in degrees (number).
+        slope_data (numpy.ndarray): Slope data in degrees (2D array).
+        aspect_data (numpy.ndarray): Aspect data in degrees (2D array).
+
+    Returns:
+        numpy.ndarray: Corrected band data.
+    """
+
+    # Convert angles to radians
+    # Convert solar elevation angle to solar zenith angle
+    sun_zenith_rad = np.radians(90 - sun_elevation_deg)
+    sun_zenith_cos = np.cos(sun_zenith_rad)
+    sun_zenith_sin = np.sin(sun_zenith_rad)
+    del sun_zenith_rad
+
+    slope_rad = np.radians(slope_data)
+    aspect_rad = np.radians(sun_azimuth_deg - aspect_data)
+
+    # Calculate cos_sita: the cosine of the angle between sun and surface normal
+    cos_sita = (sun_zenith_cos * np.cos(slope_rad) +
+                sun_zenith_sin * np.sin(slope_rad) * np.cos(aspect_rad))
+
+    # Create a mask to check if the correction should be applied Ref. Tan et al. RSE (2013)
+    cor_mask = np.abs(cos_sita - sun_zenith_cos) > 0.05
+    if np.any(cor_mask):
+        # Apply the correction to the band only where cor_mask is True
+        band_corrected1 = band_ori1.copy()
+        band_corrected1[cor_mask] = (
+                band_ori1[cor_mask] * 
+                (np.cos(slope_rad[cor_mask]) * sun_zenith_cos) / cos_sita[cor_mask]
+            )
+        band_corrected2 = band_ori2.copy()
+        band_corrected2[cor_mask] = (
+                band_ori2[cor_mask] * 
+                (np.cos(slope_rad[cor_mask]) * sun_zenith_cos) / cos_sita[cor_mask]
+            )
+        return band_corrected1, band_corrected2
+    else:
+        return band_ori1, band_ori2
 
 def erode(mask, radius=3):
     """
@@ -392,6 +488,7 @@ def imfill(data, obsmask, fill_value=None):
     This version has been verfied as to ' imfill(image, 8)' in MATLAB.
     NOTE 8-conn is faster than 4-conn in MATLAB.
     """
+    # np.seterr(invalid='warn') # not ignore the invalid errors
     max_val = data[obsmask].max()  # the maximum value within the image extent
     if fill_value is None:
         fill_value = max_val
@@ -421,6 +518,10 @@ def imfill(data, obsmask, fill_value=None):
 
     # fill the data
     # a “seed” image, which specifies the values that spread, and a "data" (or "mask") image, which gives the maximum allowed value at each pixel
+    
+    # Check the assertion
+    # assert np.all(seed <= data), "Error: seed must be <= data for erosion."
+    # seed = np.minimum(seed, data)
     data_filled = reconstruction(
         seed, data, method="erosion"
     )  # a 3x3 square, of which return is float64
@@ -876,7 +977,7 @@ def normalize_datacube(datacube, **kwargs):
     obsmask = kwargs.get("obsmask", None)
     _datacube = datacube.copy() # not to alter the orginal values
     if C.MSG_FULL:
-        print(f">>> normalizing the data-cube with percentiles {percentiles} to {srange}")
+        print(f">>> normalizing the datacube to {srange} with percentiles {percentiles}")
     # rescale the data cube
     for i in range(0, _datacube.shape[0]):
         datalayer = normalize_image(_datacube[i, :, :], obsmask=obsmask, percentiles=percentiles, srange=srange)
@@ -928,6 +1029,22 @@ def select_cloud_seed(
         )
     return _cloud_mask
 
+def read_raster(des):
+    """
+    Read a raster dataset from a file. only singel band will be read.
+
+    Args:
+        des: The destination file path.
+
+    Returns:
+        data: The raster data.
+        profile: The profile of the raster dataset.
+    """
+    with rasterio.open(des) as src:
+        data = src.read(1)
+        profile = src.profile
+    return data, profile
+
 def save_raster(data, profile, des, dtype=None):
     """
     Save a raster dataset to a file.
@@ -945,7 +1062,8 @@ def save_raster(data, profile, des, dtype=None):
         profile["dtype"] = dtype
     else:
         profile["dtype"] = "uint8"
-    profile["driver"]="GTiff" # that make sure the rasterio does not compress the image. S2 data will be compressed by default with JPEG2000
+    # profile["driver"]="GTiff" # that make sure the rasterio does not compress the image. S2 data will be compressed by default with JPEG2000
+    profile.update(driver='GTiff', compress='LZW', tiled=True) # losslss LZW compression 
     if os.path.isfile(des):
         os.remove(des)
     with rasterio.open(des, "w", **profile) as dst:
@@ -953,7 +1071,7 @@ def save_raster(data, profile, des, dtype=None):
 
 #%% Functions of showing images
 
-def composite_rgb(red, green, blue, mask, percentiles=[2, 98]):
+def composite_rgb(red, green, blue, mask, percentiles=[2, 98], min_range = None):
     """
     Create a composite RGB image from individual red, green, and blue bands.
 
@@ -963,6 +1081,7 @@ def composite_rgb(red, green, blue, mask, percentiles=[2, 98]):
         blue (ndarray): Array representing the blue band.
         mask (ndarray): Boolean array representing the mask.
         percentiles (list, optional): List of two percentiles used for contrast stretching. Defaults to [2, 98].
+        min_range (float, optional): Minimum value for the range. Defaults to None. designed for cirrus band with mininum value 0.01
 
     Returns:
         ndarray: Composite RGB image.
@@ -970,18 +1089,27 @@ def composite_rgb(red, green, blue, mask, percentiles=[2, 98]):
     """
     _red = red.copy()
     _red[~mask] = np.nan
-    _red = np.interp(_red, np.nanpercentile(_red, percentiles), [0, 1])
+    _red_scale_range = np.nanpercentile(_red, percentiles)
+    if min_range is not None:
+        _red_scale_range[1] = max(_red_scale_range[1], min_range)
+    _red = np.interp(_red, _red_scale_range, [0, 1])
 
     _green = green.copy()
     _green[~mask] = np.nan
-    _green = np.interp(_green, np.nanpercentile(_green, percentiles), [0, 1])
+    _green_scale_range = np.nanpercentile(_green, percentiles)
+    if min_range is not None:
+        _green_scale_range[1] = max(_green_scale_range[1], min_range)
+    _green = np.interp(_green, _green_scale_range, [0, 1])
 
     _blue = blue.copy()
     _blue[~mask] = np.nan
-    _blue = np.interp(_blue, np.nanpercentile(_blue, percentiles), [0, 1])
+    _blue_scale_range = np.nanpercentile(_blue, percentiles)
+    if min_range is not None:
+        _blue_scale_range[1] = max(_blue_scale_range[1], min_range)
+    _blue = np.interp(_blue, _blue_scale_range, [0, 1])
 
     rgb = np.dstack([_red, _green, _blue])
-    return rgb
+    return rgb, _red_scale_range, _green_scale_range, _blue_scale_range
 
 def show_image(rgb, title, path=None):
     """
@@ -1003,6 +1131,22 @@ def show_image(rgb, title, path=None):
         plt.close()
     else:
         plt.show()
+
+def show_simple_mask(mask, title):
+    """
+    Display a simple mask image with a single class.
+
+    Args:
+        mask (numpy.ndarray): The mask image.
+        title (str): The title of the plot.
+
+    Returns:
+        None
+    """
+    plt.imshow(mask, cmap="gray", interpolation="none")
+    plt.axis("off")
+    plt.title(title)
+    plt.show()
 
 def show_cloud_mask(cloud_mask, classes, title):
     """
@@ -1087,6 +1231,8 @@ def show_fmask_full(fmask, title):
     """
     pass
 
+
+
 def show_fmask(fmask, title, path=None):
     """Display the cloud mask image with color-coded classes, including clear, shadow, cloud, and filled
 
@@ -1115,6 +1261,7 @@ def show_fmask(fmask, title, path=None):
     cloud_mask_show[fmask == C.LABEL_CLOUD] = 4
 
     # show the image
+
     im = plt.imshow(cloud_mask_show, cmap=cm, vmin=0.5, vmax=4.5, interpolation="none")
     plt.axis("off")
     plt.title(title)
@@ -1209,7 +1356,8 @@ def show_cloud_probability(cloud_prob, mask_filled, title):
         _cloud_prob[mask_filled] = np.nan
         cm = mpl.colormaps.get_cmap("RdYlGn_r")
         cm.set_bad(color="#cccccc")  # gray for filled
-        plt.rcParams.update({'font.size': 22}) # using a larger font size
+        # plt.rcParams.update({'font.size': 22}) # using a larger font size
+        plt.rcParams.update({'font.size': 14}) # using a larger font size
         c = plt.imshow(_cloud_prob, vmin=0, vmax=1, cmap=cm, interpolation="nearest")
         plt.axis("off")
         plt.title(title)

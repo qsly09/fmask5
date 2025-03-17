@@ -1,6 +1,12 @@
-"""Test shadow matching by using different models
-1. Test mininum similairty (in this case, we use all cloud pixels)
-2. Test how many cloud pixels can be randomly selected to match shadow at mininum
+"""Testing Shadow Matching Using the UPL Cloud Detection Model
+
+Test the minimum similarity requirement (using all cloud pixels).
+Determine the minimum number of randomly selected cloud pixels needed to match a shadow.
+UPL was chosen as it is the most effective cloud detection model for Landsat 8 and Sentinel-2 data.
+
+The same L8Biome dataset was used to assess shadow matching for both Landsat and Sentinel-2.
+For Landsat data, the thermal band is utilized to construct a 3D cloud object, helping to narrow the cloud height range.
+For Sentinel-2 data, which lacks a thermal band, only a 2D cloud object is used, and the cloud height range remains broader.
 
 """
 # pylint: disable=missing-module-docstring
@@ -22,12 +28,13 @@ import copy
 from utils import exclude_images_by_tile
 
 #%% test setups for testing minimum similarity
-similaritys = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+similaritys = [0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+similaritys = [0, 0.1, 0.2, 0.3, 0.4, 0.5] # after testing, 0.3 is acceptable for L8Biome dataset
 sampling_clouds = [0]
 
 #%% test setups for testing how many cloud pixels can be randomly selected to match shadow at mininum
-similaritys = [0.3] # after testing, 0.3 is acceptable for L8Biome dataset
-sampling_clouds = [1000, 5000, 10000, 20000, 30000, 40000, 50000, 60000, 70000, 80000, 90000, 100000]
+similaritys = [0.3] # after testing, 0.3 is acceptable for L8Biome dataset, same as the orginal version. so we do not change it
+sampling_clouds = [0, 1000, 5000, 10000, 20000, 30000, 40000, 50000, 60000, 70000, 80000, 90000, 100000]
 
 # below images does not contain cloud shadow layer in L8Biome dataset
 IMAGE_LIST_NONSHADOW = ['L895CLOUD', # all the dataset does not have the cloud shadow layer
@@ -100,7 +107,7 @@ IMAGE_LIST_NONSHADOW = ['L895CLOUD', # all the dataset does not have the cloud s
     "-r",
     type=str,
     help="The resource directory of Landsat/Sentinel-2 data. It supports a directory which contains mutiple images or a single image folder",
-    default="/scratch/shq19004/ProjectCloudDetectionFmask5/ReferenceDataset/L8BIOME",
+    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/ReferenceDataset/L8BIOME",
 )
 @click.option(
     "--destination",
@@ -114,13 +121,6 @@ IMAGE_LIST_NONSHADOW = ['L895CLOUD', # all the dataset does not have the cloud s
 def main(resource, destination, ci, cn) -> None:
     # get the dataset name
     dataset = os.path.basename(resource)
-    # indicate whether we will simulate the landsat7 data using Landsat 8
-    if os.path.basename(destination).endswith("L7"):
-        LANDSAT7 = True
-    else:
-        LANDSAT7 = False
-    # Create task record object
-    tasks = []
 
     # Create task record object
     tasks = []
@@ -131,10 +131,10 @@ def main(resource, destination, ci, cn) -> None:
         for sampling_cloud in sampling_clouds:
             for similarity in similaritys:
                 tasks.append({"path_image": path_image, "sampling_cloud":sampling_cloud, "similarity": similarity})
-
+    # 168 jobs in total for testing the minimum similarity
+    # 336 jobs in total for testing how many cloud pixels can be randomly selected to match shadow at mininum
     # Divide the tasks into different cores
     tasks = [tasks[i] for i in range(ci - 1, len(tasks), cn)]
-    image_name_pre = ''
     for task in tasks:
         path_image = task["path_image"]
         similarity = task["similarity"]
@@ -145,48 +145,45 @@ def main(resource, destination, ci, cn) -> None:
         print(f"  sampling_cloud: {sampling_cloud}")
 
        # check if the csv file exists ahead
-        fmask0 = Fmask(path_image, algorithm = "physical")
-        #  "physical_shadow_match_include_thermal",
-        #  "physical_shadow_match_exclude_thermal", # also go to match_cloud2shadow funciton to force to set THERMAL_INCLUDED = False
+        fmask0 = Fmask(path_image, algorithm = "interaction", base = "unet", tune = "lightgbm")
+        destination_img = os.path.join(destination, "shadow_match_include_thermal")
+        #  "shadow_match_include_thermal",
+        #  "shadow_match_exclude_thermal", # also go to match_cloud2shadow funciton to force to set THERMAL_INCLUDED = False
+        end_key = f"{int(1000*similarity):04d}_{sampling_cloud}"
         path_csv = os.path.join(
-            destination,
-            "physical_shadow_match_include_thermal",
+            destination_img,
             fmask0.image.name,
-            f"{fmask0.image.name}_{int(1000*similarity):04d}_{sampling_cloud}.csv"
+            f"{fmask0.image.name}_{end_key}.csv"
         )  # loc to the image being excluded
         if os.path.exists(path_csv):
             print(f">>> existing {path_csv}")
             print(">>> skipping...")
             continue
-        
-        time_start = time.perf_counter()
-        # load fmask object once for each image, and if the image is different from the previous one
-        if image_name_pre != os.path.basename(path_image):
-            # physical rules
-            fmask = Fmask(path_image, algorithm = "physical")
-            if LANDSAT7:
-                fmask.image.spacecraft = "LANDSAT_7"
-            fmask.show_figure = False
-            fmask.init_modules() # initilize the modules, such as physical, rf_cloud, unet_cloud, etc.
-            fmask.load_image()
 
         time_start = time.perf_counter()
-        # set the minumum number of clear pixels
+        fmask = Fmask(path_image, algorithm = "interaction", base = "unet", tune = "lightgbm")
+        fmask.buffer_cloud = 0 # set the buffer cloud to 0
         fmask.physical.similarity = similarity
         fmask.physical.sampling_cloud = sampling_cloud
-        fmask.physical.init_cloud_probability() #
-        fmask.mask_cloud_physical()
-        fmask.mask_shadow()
-        running_time = time.perf_counter() - time_start
-
-        fmask.image.destination = destination
+        fmask.load_image()
+        fmask.mask_cloud()
+        fmask.mask_shadow(postprocess='unet', min_area=0, potential = "flood")
+        fmask.image.destination = destination_img
         # save the accuracy of the cloud mask
         fmask.save_accuracy(
-            dataset, path_csv, running_time=running_time,
+            dataset, path_csv, running_time=time.perf_counter() - time_start,
             shadow = True
         )  # Save the accuracy of the cloud mask
-        # update this image name
-        image_name_pre = os.path.basename(path_image)
+        # fmask.display_fmask(path = os.path.join(destination_img, fmask.image.name + f'_{end_key}.png'))
+        # fmask.display_image(bands = ["nir", "red", "green"],
+        #                     title = 'Color composite image',
+        #                     percentiles = [10, 90],
+        #                     path = os.path.join(destination_img, fmask.image.name + '_NRG.png'))
+        # fmask.display_image(bands = ["swir1", "nir", "red"],
+        #                     title = 'Color composite image',
+        #                     percentiles = [10, 90],
+        #                     path = os.path.join(destination_img, fmask.image.name + '_SNR.png'))
+
 
 # main port to run the fmask by command line
 if __name__ == "__main__":

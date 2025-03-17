@@ -324,6 +324,8 @@ class Satellite:
         """
         raise NotImplementedError("Method must be implemented in subclass")
 
+    
+        
     def get_saturation(self, band="visible"):
         """
         Get the saturation of the input image based on the specified name.
@@ -350,7 +352,7 @@ class Satellite:
             return self.saturation.get(1)
         if band == "red":
             return self.saturation.get(2)
-
+    
     def load_data(self, predictors):
         """
         Loads the data for the satellite.
@@ -365,7 +367,16 @@ class Satellite:
             None
         """
         raise NotImplementedError("Method must be implemented in subclass")
+    
+    def clean_saturation(self):
+        """Clean the saturation layer and free memory."""
+        del self.saturation  # Explicitly delete the object
+        self.saturation = None  # Reset the attribute
 
+    def clean_data(self):
+        """Clean the datacube and free memory."""
+        del self.data
+        self.data = None
 
 class Landsat(Satellite):
     """Class of Landsat imagery
@@ -739,7 +750,9 @@ class Landsat(Satellite):
             # default value will be zero still, which will not used in the water mask
 
         # Fix the pixels in error
-        bands = np.nan_to_num(bands, nan=C.EPS, posinf=C.EPS, neginf=C.EPS)
+        # check any nan values in the bands
+        if np.any(np.isnan(bands)):
+            bands = np.nan_to_num(bands, nan=C.EPS, posinf=C.EPS, neginf=C.EPS)
 
         # return the band name and data
         return Data(bands, predictors), statu

@@ -1,4 +1,5 @@
 import numpy as np
+np.seterr(invalid='ignore') # ignore the invalid errors
 
 class BitLayer:
     """

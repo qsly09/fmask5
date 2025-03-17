@@ -56,7 +56,6 @@ def download_data_from_drive(source_url, destination, drive='google_drive'):
     Returns:
     None
     """
-    
     if drive == 'google_drive':
         download_data_from_google_drive(source_url, destination)
 
