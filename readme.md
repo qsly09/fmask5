@@ -162,7 +162,7 @@ TBD
 - Applied Physics-Informed Machine Learning (PIML) framework for cloud detection, as described in Qiu et al., 2025.
 - Adapted cloud shadow detection from MATLAB Fmask 4.6 with minor improvements described on [this page](https://github.com/qsly09/fmask5/wiki/Cloud-Shadow-Detection).
 
-#### 1 - 4.6
+#### 1.6 - 4.6
 Earlier versions of the Fmask tools offered only a physical-rule-based cloud detection module, programmed in MATLAB. See [this page](https://github.com/GERSL/Fmask) for more details.
 
 ## Contributing
