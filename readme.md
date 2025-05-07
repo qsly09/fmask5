@@ -1,7 +1,9 @@
 # Fmask
 Fmask (Function of mask) is an automated algorithm for detecting clouds and cloud shadows in Landsat 4–9 (including 4, 5, 7, 8, and 9) and Sentinel-2 imagery. **It processes Landsats 4-9 Collection 2 Level 1 imagery (Digital Number) and Sentinel-2 baseline 3/4 Level-1C imagery (Top Of Atmosphere reflectance).**
 
-Version 5.0 introduces a Physics-Informed Machine Learning (PIML) framework (Figure 1) to enhance cloud detection accuracy, while cloud shadow detection relies on the physical geometric relationship between identified clouds and their corresponding shadows.
+Version 5.0 introduces a Physics-Informed Machine Learning (PIML) framework ([Figure 1](#figure1)) to enhance cloud detection accuracy, while cloud shadow detection relies on the physical geometric relationship between identified clouds and their corresponding shadows.
+
+<a name="figure1"></a>
 
 ![Figure 1](https://github.com/qsly09/fmask5/blob/main/figure/figure_piml_flowchart.svg?raw=true)
 Figure 1: Flowchart of physics-informed machine learning (PIML) for cloud detection. The approach utilizes pixel-based LightGBM and CNN-based UNet models. The arrow indicates the processing sequence, transitioning from gray to black arrows. Abbreviations: HOT: Haze Optimized Transformation.
