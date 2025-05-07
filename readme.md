@@ -6,15 +6,18 @@ Fmask (Function of mask) is an automated algorithm for detecting clouds and clou
 Figure 1: Flowchart of physics-informed machine learning (PIML) for cloud detection. The approach utilizes pixel-based LightGBM and CNN-based UNet models. The arrow indicates the processing sequence, transitioning from gray to black arrows. Abbreviations: HOT: Haze Optimized Transformation.
 
 # Complete Package
-This repository only provides the source code and does not include the integrated global auxiliary datasets or pre-trained machine learning models.
+**This repository only provides the source code and does *not* include the integrated global auxiliary datasets or pre-trained machine learning models.** To access the complete Fmask package (~3 GB), including all necessary auxiliary data and model files, please download it from the link(s) below:
 
-To access the complete Fmask packages, including all historical versions, you can download them from the Fmask Google Drive.
+| Version | Download |
+|---------|----------|
+| 5.0.0   | [Link to Fmask 5.0.0 package](https://uconn-my.sharepoint.com/:u:/g/personal/shi_qiu_uconn_edu/EcZXc62z4GlFsfSknY--Y7YBI1xjw478k9OcyUcquwaXRg?e=4K3Ba0) |
+
 
 # How to Use
 ## Installation
 TBD
 
-## Running Fmask
+## Running Fmask from the `main` Folder
 To apply Fmask-UPL on a single Landsat 8-9 image:
 ```bash
 python fmask.py --imagepath /path/to/image_directory_landsat8-9 --model UPL
@@ -45,8 +48,79 @@ python fmask.py --imagepath /path/to/image_directory_landsat4-7 --model LPL
 | `--display_image`  | `-di` | Save and display the color composite PNG (NGR: NIR-Green-Red and SNG: SWIR1-NIR-Red).           | `no`   |
 | `--print_summary`  | `-ps` | Print cloud, shadow, snow, and clear percentage summary.                                        | `no`    |
 
+### Cloud Detection Models
+TBD
+
+### Progress Information
+If the tool runs successfully, you will see progress information as shown below:
+
+    ************************************************
+    Starting Fmask 5.0.0 with dilating 3 for cloud, 5 for shadow, and 0 for snow  
+    Processing /gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/Landsat/LC08_L1TP_048022_20230713_20230724_02_T1 with Fmask-UPL model
+    >>> loading solar_zenith in radian  
+    >>> loading coastal in toa  
+    >>> loading blue in toa 
+<details>
+<summary>Click to see the full information of the progress</summary>
+
+    ************************************************
+    Starting Fmask 5.0.0 with dilating 3 for cloud, 5 for shadow, and 0 for snow  
+    Processing /gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/Landsat/LC08_L1TP_048022_20230713_20230724_02_T1 with Fmask-UPL model  
+    >>> loading solar_zenith in radian  
+    >>> loading coastal in toa  
+    >>> loading blue in toa  
+    >>> loading green in toa  
+    >>> loading red in toa  
+    >>> loading nir in toa  
+    >>> loading swir1 in toa  
+    >>> loading swir2 in toa  
+    >>> loading tirs1 in bt  
+    >>> loading tirs2 in bt  
+    >>> loading cirrus in toa  
+    >>> calculating hot  
+    >>> calculating whiteness  
+    >>> calculating ndvi  
+    >>> calculating ndsi  
+    >>> calculating ndbi  
+    >>> calculating sfdi  
+    >>> calculating var_nir  
+    >>> loading dem from gtopo30  
+    >>> loading gswo  
+    >>> loading ['unet'] as base machine learning model  
+    >>> loading lightgbm as tune machine learning model  
+    >>> normalizing the datacube to [-1, 1] with percentiles [1, 99]  
+    >>> classifying image by unet  
+    >>> adjusting physical rules 01/01  
+    >>> cloud probability (TTT) | overlap: 0.198981859 | optimal threshold: 0.025000000  
+    >>> cloud probability (FTT) | overlap: 0.248279496 | optimal threshold: 0.000000000  
+    >>> cloud probability (TFT) | overlap: 0.110536988 | optimal threshold: 0.025000000  
+    >>> cloud probability (FFT) | overlap: 0.248274458 | optimal threshold: 0.000000000  
+    >>> cloud probability (TTF) | overlap: 0.212598233 | optimal threshold: 0.025000000  
+    >>> cloud probability (FTF) | overlap: 0.248252342 | optimal threshold: 0.000000000  
+    >>> optimal cloud probability (TFT) | optimal threshold: 0.03  
+    >>> tuning machine learning model 01/01  
+    >>> training lightgbm 100 tree based on 10001 samples  
+    >>> using 19 predictors: ['coastal', 'blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'tirs1', 'tirs2', 'cirrus', 'hot', 'whiteness', 'ndvi', 'ndsi', 'ndbi', 'sfdi', 'var_nir', 'dem', 'swo']  
+    >>> classifying the image by lightgbm model  
+    >>> stop iterating at the end  
+    >>> postprocessing with morphology&unet-based elimination  
+    >>> masking potential cloud shadow by flood-fill  
+    >>> loading gtopo30-slope  
+    >>> loading gtopo30-aspect  
+    >>> loading sensor_zenith in degree  
+    >>> loading sensor_azimuth in degree  
+    >>> matching cloud shadows  
+    >>> saved fmask layer as geotiff to /gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/Landsat/LC08_L1TP_048022_20230713_20230724_02_T1  
+    Finished with 11.90 mins
+
+</details>
+
+
+
 ### Output
-The tool generates a uint8 GeoTIFF file named after the selected cloud detection model. Each pixel is classified with one of the following values:
+The tool generates a uint8 GeoTIFF file named after the selected cloud detection model, such as '\<image folder name\>_UPL.tif'.
+
+Each pixel is classified with one of the following values:
 
 | Value | Class           | Description                                                                                                         |
 |-------|---------------- |---------------------------------------------------------------------------------------------------------------------|
@@ -59,6 +133,8 @@ The tool generates a uint8 GeoTIFF file named after the selected cloud detection
 
 > **Note:** Water and snow/ice pixels are labeled solely to enhance cloud detection. Their detection accuracy has not been evaluated.
 
+### Computing Efficiency
+TBD
 
 ### Version History
 #### 5.0.0
