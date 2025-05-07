@@ -15,7 +15,6 @@
 *.err
 
 # Ignore figures
-*.svg
 *.png
 *.tif
 
