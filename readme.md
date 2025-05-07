@@ -64,7 +64,7 @@ python fmask.py --imagepath /path/to/image_directory_landsat4-7 --model LPL
 | Option             | Short | Description                                                                                     | Default |
 |--------------------|-------|-------------------------------------------------------------------------------------------------|---------|
 | `--imagepath`      | `-i`  | Path to input image directory (Landsat/Sentinel-2).                                             | *required* |
-| `--model`          | `-m`  | Cloud detection model to use (Options shown in the table of cloud detection models).            | `UPL` |
+| `--model`          | `-m`  | Cloud detection model to use (Options shown in [Table 1](#table1)).            | `UPL` |
 | `--dcloud`         | `-c`  | Dilation size (in pixels) for cloud mask.                                                       | `3`     |
 | `--dshadow`        | `-s`  | Dilation size (in pixels) for cloud shadow mask.                                                | `5`     |
 | `--dsnow`          | `-n`  | Dilation size (in pixels) for snow/ice mask.                                                    | `0`     |
