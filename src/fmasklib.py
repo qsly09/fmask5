@@ -22,9 +22,6 @@ class Fmask(object):
     """Fmask class
     """
 
-    # Version of the Fmask algorithm
-    version = 5.0
-
     # Cloud detection algorithm
     algorithm = "interaction"  # the algorithm for cloud masking, including "physical", "randomforest", "unet", "interaction"
 
@@ -141,12 +138,12 @@ class Fmask(object):
                 mask[self.physical.snow] = C.LABEL_SNOW
             if self.shadow is not None:
                 if self.buffer_shadow > 0:
-                    mask[utils.dilate(self.shadow)] = C.LABEL_SHADOW
+                    mask[utils.dilate(self.shadow, radius=self.buffer_shadow)] = C.LABEL_SHADOW
                 else:
                     mask[self.shadow] = C.LABEL_SHADOW
             # the cloud mask must exist
             if self.buffer_cloud > 0:
-                mask[utils.dilate(self.cloud.last)] = C.LABEL_CLOUD
+                mask[utils.dilate(self.cloud.last, radius=self.buffer_cloud)] = C.LABEL_CLOUD
             else:
                 mask[self.cloud.last] = C.LABEL_CLOUD
             mask[self.image.filled] = C.LABEL_FILL
@@ -262,7 +259,6 @@ class Fmask(object):
             self.physical = Physical(
                 predictors=P.s2_predictor_cloud_phy.copy(), woc=0.5, threshold=0.2, overlap=0.0
             )
-
             self.lightgbm_cloud = LightGBM(
                 classes=["noncloud", "cloud"],
                 num_leaves=10,
@@ -400,6 +396,7 @@ class Fmask(object):
             Path(destination).parent.mkdir(parents=True, exist_ok=True)
             pf_sample.to_csv(destination)
             print(f">>> saved to {destination}")
+            
         return pf_sample
 
     def generate_train_data_patch(
@@ -456,13 +453,15 @@ class Fmask(object):
         self.cloud = BitLayer(self.image.shape)
         self.cloud.append(self.physical.pcp)
 
-    def mask_shadow(self, postprocess, min_area, potential = "flood", topo="SCS"):
+    def mask_shadow(self, postprocess, dilation = 100, min_area = 3, buffer2connect = 0, potential = "flood", topo="SCS", thermal_adjust = True, threshold = 0.15):
         """
         Masks the shadow in the image based on the given parameters.
         Parameters:
-        postprocess (bool): Indicates whether post-processing should be applied.
+        postprocess (str): Indicates whether post-processing should be applied.
+        dilation (int): The size of the dilation to be applied. Only work for the UNet-based postprocessing. i.e., postprocess = "unet", dilate 100 pixels to reduce the omission errors from UNet, particularly for the small clouds and clouds at boundary
         min_area (int): The minimum area of the shadow to be considered.
         potential (str, optional): The method to be used for potential shadow detection. Defaults to "flood".
+        thermal_include (bool, optional): Indicates whether thermal information should be included. Defaults to True, only for Landsat.
         Returns:
         None
         Notes:
@@ -478,10 +477,10 @@ class Fmask(object):
                 print(">>> skipping cloud shadow matching due to high cloud coverage.")
             self.mask_shadow_rest()
         else:
-            self.create_cloud_object(postprocess=postprocess, min_area=min_area)
-            self.mask_shadow_geometry(potential=potential, topo=topo)
+            self.create_cloud_object(postprocess=postprocess, dilation = dilation, min_area=min_area, buffer2connect=buffer2connect)
+            self.mask_shadow_geometry(potential=potential, topo=topo, thermal_adjust=thermal_adjust, threshold = threshold)
 
-    def mask_shadow_rest(self): 
+    def mask_shadow_rest(self):
         """Masks the cloud shadow on the left side of the cloud."""
         self.shadow = ~self.cloud.last  # Bitwise negation for masks
 
@@ -548,7 +547,7 @@ class Fmask(object):
             )
 
     # post processing and generate cloud objects
-    def create_cloud_object(self, min_area = 3, postprocess = "none"):
+    def create_cloud_object(self, min_area = 3, postprocess = "none", dilation = 0, buffer2connect = 0):
         """
         Erodes the false positive cloud pixels.
         Returns:
@@ -559,7 +558,9 @@ class Fmask(object):
         cloud_layer[self.image.filled] = 0
         if (postprocess == "none"):
             # no postprocessing
-            [cloud_objects, cloud_regions] = segment_cloud_objects(cloud_layer, min_area=min_area, buffer2connect=0)
+            [cloud_objects, cloud_regions] = segment_cloud_objects(cloud_layer, min_area=min_area)
+            if min_area > 0: # only when min_area > 0, we need to remove the small cloud objects, and then we need to update the cloud layer recorded
+                self.cloud.append(cloud_objects >0)
         elif (postprocess == "morphology"):
             # only when the physical model is activated
             # if not self.physical.activated:
@@ -567,7 +568,6 @@ class Fmask(object):
             # morphology-based, follow Qiu et al., 2019 RSE
             if C.MSG_FULL:
                 print(">>> postprocessing with morphology-based elimination")
-
             # get the potential false positive cloud pixels
             pfpl = self.mask_potential_bright_surface()
             # erode the false positive cloud pixels
@@ -577,9 +577,9 @@ class Fmask(object):
 
             # segment the cloud pixels into objects, and if all the pixels of cloud are over the eroded layer, then remove the cloud object
             # remove the small cloud objects less than 3 pixels
-            [cloud_objects, cloud_regions] = segment_cloud_objects(cloud_layer, min_area=min_area, buffer2connect=0, exclude=pfpl, exclude_method = 'all')
+            [cloud_objects, cloud_regions] = segment_cloud_objects(cloud_layer, min_area=min_area, exclude=pfpl, exclude_method = 'all')
             del pfpl
-            
+
             # remove the small cloud objects 
             if self.image.data.exist("cdi"):
                 # Pre-calculate the mask for `_cdi > -0.5
@@ -595,20 +595,65 @@ class Fmask(object):
                 del false_small_cloud, cdi_mask
                 cloud_regions = [cloud_regions[i] for i in valid_indices]
                 del valid_indices
+            # after postprocessing
+            self.cloud.append(cloud_objects >0)
         elif (postprocess == "unet"):
             # only when the physical model is activated
             # if not self.physical.activated:
             #    return
             if C.MSG_FULL:
                 print(">>> postprocessing with UNet-based elimination")
-            [cloud_objects, cloud_regions] = segment_cloud_objects(cloud_layer, min_area=min_area, buffer2connect=0, exclude=(self.cloud.first==0), exclude_method = 'all')
+            # Use dilated version only if needed
+            unet_cloud = self.cloud.first
+            unet_cloud = utils.dilate(unet_cloud, radius=dilation) if dilation > 0 else unet_cloud
+            [cloud_objects, cloud_regions] = segment_cloud_objects(cloud_layer, min_area=min_area, exclude=(unet_cloud==0), exclude_method = 'all')
+            del unet_cloud
+            # after postprocessing
+            self.cloud.append(cloud_objects >0)
+        elif (postprocess == "morphology_unet"):
+            if C.MSG_FULL:
+                print(">>> postprocessing with morphology&unet-based elimination")
+            # Use dilated version only if needed
+            unet_cloud = self.cloud.first
+            unet_cloud = utils.dilate(unet_cloud, radius=dilation) if dilation > 0 else unet_cloud
+             # get the potential false positive cloud pixels
+            pfpl = self.mask_potential_bright_surface()
+            # erode the false positive cloud pixels
+            pixels_eroded = utils.erode(cloud_layer, radius = self.erosion_radius)
+            pfpl = (~pixels_eroded) & pfpl & (~self.physical.water) & self.image.obsmask # indicate the eroded cloud pixels over land
+            del pixels_eroded
+            pfpl = pfpl | (unet_cloud==0) # exclude the unet cloud pixels
+            del unet_cloud
+            # segment the cloud pixels into objects, and if all the pixels of cloud are over the eroded layer, then remove the cloud object
+            # remove the small cloud objects less than 3 pixels
+            [cloud_objects, cloud_regions] = segment_cloud_objects(cloud_layer, min_area=min_area, exclude=pfpl, exclude_method = 'all')
+            del pfpl
 
+            # remove the small cloud objects 
+            if self.image.data.exist("cdi"):
+                # Pre-calculate the mask for `_cdi > -0.5
+                cdi_mask = self.image.data.get("cdi") > -0.5
+                false_small_cloud = np.zeros_like(cloud_objects, dtype=bool) # initialize the cloud_objects as 0
+                valid_indices = []
+                for icloud, cld_obj in enumerate(cloud_regions):
+                    if (cld_obj.area < 10000) and (np.all(cdi_mask[cld_obj.coords[:, 0], cld_obj.coords[:, 1]])): # Check if all cdi values are > -0.5
+                        false_small_cloud[cld_obj.coords[:, 0], cld_obj.coords[:, 1]] = True
+                    else:
+                        valid_indices.append(icloud)
+                cloud_objects[false_small_cloud] = 0
+                del false_small_cloud, cdi_mask
+                cloud_regions = [cloud_regions[i] for i in valid_indices]
+                del valid_indices
+            # after postprocessing
+            self.cloud.append(cloud_objects >0)
+        
+        # only do this after making the postprocessing for cloud objects, such as the mininum size of small cloud objects
+        if buffer2connect > 0:
+            [cloud_objects, cloud_regions] = segment_cloud_objects(cloud_objects >0, buffer2connect=buffer2connect)
         # assign the cloud objects and regions 
         self.cloud_object = cloud_objects
         self.cloud_region = cloud_regions
         # update the cloud mask after postprocessing
-        self.cloud.append(self.cloud_object >0)
-        
 
     def mask_potential_bright_surface(self):
         """
@@ -1122,6 +1167,9 @@ class Fmask(object):
                 self.image.destination, self.image.name + "_" + endname.upper() + ".tif"
             ),
         )
+        if C.MSG_FULL:
+            print(f">>> saved fmask layer as geotiff to {self.image.destination}")
+        
 
     def save_model_metadata(self, path, running_time=0.0) -> None:
         """save model's metadata to a CSV file
@@ -1149,6 +1197,8 @@ class Fmask(object):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         # print(df_accuracy)
         df_accuracy.to_csv(path)
+        if C.MSG_FULL:
+            print(f">>> saved metadata as csv file to {path}")
         
 
     def save_accuracy(self, dataset, path, running_time=0.0, shadow=False):
@@ -1254,7 +1304,7 @@ class Fmask(object):
         print(df_accuracy)
         df_accuracy.to_csv(path)
 
-    def mask_shadow_flood(self, topo='SCS'):
+    def mask_shadow_flood(self, topo='SCS', threshold = 0.15):
         """
         Mask cloud shadows based on the flood method.
         Args:
@@ -1268,6 +1318,7 @@ class Fmask(object):
                 self.image.data.get("swir1"),
                 self.physical.abs_clear_land,
                 self.image.obsmask,
+                threshold = threshold,
             )
         else:
             slope = utils.gen_slope(self.image.profile)
@@ -1304,16 +1355,12 @@ class Fmask(object):
                     swir1_background = 0
                 # correct the topo for the NIR and SWIR1 bands at the same time
                 nir_cor, swir_cor = utils.topo_correct_scs(self.image.data.get("nir"), self.image.data.get("swir1"),  self.image.sun_elevation, self.image.sun_azimuth, slope, aspect)
-                return flood_fill_shadow(
-                    nir_cor,
-                    swir_cor,
-                    _abs_land_pixels,
-                    self.image.obsmask,
-                    nir_background = nir_background,
-                    swir1_background = swir1_background,
-                )
+                return flood_fill_shadow(nir_cor, swir_cor, _abs_land_pixels, self.image.obsmask,
+                                         threshold = threshold,
+                                         nir_background = nir_background,
+                                         swir1_background = swir1_background)
 
-    def mask_shadow_geometry(self, potential="flood", topo = 'SCS'):
+    def mask_shadow_geometry(self, potential="flood", topo = 'SCS', thermal_adjust = True, threshold = 0.15):
         """
         Masks the shadow in the image using the specified potential algorithms.
 
@@ -1337,7 +1384,7 @@ class Fmask(object):
             if ialg.lower() == "flood":
                 if C.MSG_FULL:
                     print(">>> masking potential cloud shadow by flood-fill")
-                shadow_mask_binary = self.mask_shadow_flood(topo=topo)
+                shadow_mask_binary = self.mask_shadow_flood(topo=topo, threshold = threshold)
             elif ialg.lower() == "unet":
                 pass # TBD
             # add the shadow mask to the potential shadow mask
@@ -1357,7 +1404,9 @@ class Fmask(object):
         self.shadow = self.physical.match_cloud2shadow(
             self.cloud_object,
             self.cloud_region,
-            pshadow
+            pshadow,
+            self.physical.water,
+            thermal_adjust = thermal_adjust
         )
 
     def display_fmask(self, endname = "", path=None, skip=True):
@@ -1372,7 +1421,7 @@ class Fmask(object):
             emask, _ = utils.read_raster(path.replace(".png", ".tif"))
         utils.show_fmask(emask, endname, path)
         if C.MSG_FULL:
-            print(f">>> {path} is generated to show the Fmask")
+            print(f">>> saved cloud/shadow visualization as PNG file to {path}")
         
     def print_summary(self):
         """

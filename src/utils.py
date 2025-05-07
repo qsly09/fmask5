@@ -471,9 +471,24 @@ def dilate(mask, radius=3):
     Returns:
         ndarray: Dilated mask.
     """
-    return binary_dilation(
-        mask, footprint=np.ones((2 * radius + 1, 2 * radius + 1)), out=None
-    )
+    #return binary_dilation(
+    #    mask, footprint=np.ones((2 * radius + 1, 2 * radius + 1)), out=None
+    #)
+    max_step = 10 # too large radius will cost too much time and memory
+    if radius <= max_step:
+        return binary_dilation(
+            mask, footprint=np.ones((2 * radius + 1, 2 * radius + 1)), out=None
+        )
+    else:
+        # use a larger kernel to speed up the process
+        i = 1
+        while i < radius:
+            current_step = min(max_step, radius - i + 1)
+            mask = binary_dilation(
+                mask, footprint=np.ones((2 * current_step + 1, 2 * current_step + 1)), out=None
+            )
+            i += max_step
+        return mask
 
 def imfill(data, obsmask, fill_value=None):
     """
@@ -1233,7 +1248,7 @@ def show_fmask_full(fmask, title):
 
 
 
-def show_fmask(fmask, title, path=None):
+def show_fmask(fmask, title, path=None, color_bar=False):
     """Display the cloud mask image with color-coded classes, including clear, shadow, cloud, and filled
 
     Args:
@@ -1265,9 +1280,10 @@ def show_fmask(fmask, title, path=None):
     im = plt.imshow(cloud_mask_show, cmap=cm, vmin=0.5, vmax=4.5, interpolation="none")
     plt.axis("off")
     plt.title(title)
-    cbar = plt.colorbar(im, ticks=range(4))
-    cbar.ax.get_yaxis().set_ticks([1, 2, 3, 4])
-    cbar.ax.get_yaxis().set_ticklabels(label_dict)
+    if color_bar:
+        cbar = plt.colorbar(im, ticks=range(4))
+        cbar.ax.get_yaxis().set_ticks([1, 2, 3, 4])
+        cbar.ax.get_yaxis().set_ticklabels(label_dict)
 
     if path is not None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)

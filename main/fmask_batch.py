@@ -12,7 +12,7 @@ Description:
 Batch processing of Landsat and Sentinel-2 images using Fmask 5.0.0. See details at fmask.py
 
 Usage examples:
-- python fmask.py --model=UPL --imagedir='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset'
+- python fmask.py --model=UPL --dcloud=0 --dshadow=5 --imagedir='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset'
 
 Command-line arguments:
 --model: the Fmask cloud detection model to use (PHY, GBM, UNT, LPL, UPU, LPU, UPL)
@@ -27,7 +27,7 @@ Command-line arguments:
 --print_summary: print the summary of the Fmask result, including the percentage of cloud, shadow, snow, and clear; default is 'no'
 
 Changelog:
-- 5.0.0 (2025-03-13): Initial release.
+- 5.0.0 (2025-05-7): Initial release.
 """
 
 
@@ -43,7 +43,7 @@ sys.path.append(
 from fmask import fmask_physical, fmask_lightgbm, fmask_unet, fmask_lpl,  fmask_lpu, fmask_upl, fmask_upu
 
 @click.command()
-@click.option("--model", "-m", type=str, help="Cloud detection model to use.", default="PHY")
+@click.option("--model", "-m", type=str, help="Cloud detection model to use.", default="GBM")
 @click.option("--dcloud", "-c", type=int, help="Dilation for cloud mask in pixels", default=0)
 @click.option("--dshadow", "-s", type=int, help="Dilation for shadow mask in pixels", default=5)
 @click.option("--dsnow", "-n", type=int, help="Dilation for shadow mask in pixels", default=0)
@@ -51,17 +51,17 @@ from fmask import fmask_physical, fmask_lightgbm, fmask_unet, fmask_lpl,  fmask_
     "--imagedir", "-i",
     type=str,
     help="Directory containing Landsat/Sentinel-2 images. Supports multiple images.",
-    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat89/",
+    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat47",
 )
 @click.option(
     "--output", "-o",
     type=str,
     help="Destination directory for results. If not provided, results are saved in the resource directory.",
-    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat89MaskCPU_Post",
+    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat47MaskCPU",
 )
 @click.option("--skip_existing", "-s", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Skip processing if results already exist (set to 0 to force generation).", default="yes")
-@click.option("--save_metadata", "-md", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Save model metadata to a CSV file.", default="no")
-@click.option("--display_fmask", "-df", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Display and save the Fmask result as a PNG file.", default="no")
+@click.option("--save_metadata", "-md", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Save model metadata to a CSV file.", default="yes")
+@click.option("--display_fmask", "-df", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Display and save the Fmask result as a PNG file.", default="yes")
 @click.option("--display_image", "-di", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Display and save color composite images as PNG files.", default="no")
 @click.option("--print_summary", "-ps", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Print Fmask summary including cloud, shadow, snow, and clear percentages.", default="no")
 @click.option("--ci", "-ci", type=int, help="The core's id", default=1)

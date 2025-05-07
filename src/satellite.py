@@ -262,7 +262,7 @@ class Satellite:
                     {"NAME": "TIRS2", "ID": "11"},
                 ]
             )
-        if spacecraft in ["SENTINEL-2A", "SENTINEL-2B"]:
+        if spacecraft in ["SENTINEL-2A", "SENTINEL-2B", "SENTINEL-2C"]:
             return pandas.DataFrame(
                 [
                     {"NAME": "COASTAL", "ID": "01"},
@@ -347,7 +347,7 @@ class Satellite:
         if band == "visible":
             return (self.saturation.get(0) | self.saturation.get(1) | self.saturation.get(2))
         if band == "blue":
-            return self.saturation.get(0) 
+            return self.saturation.get(0)
         if band == "green":
             return self.saturation.get(1)
         if band == "red":
@@ -376,7 +376,9 @@ class Satellite:
     def clean_data(self):
         """Clean the datacube and free memory."""
         del self.data
+        del self.saturation
         self.data = None
+        self.saturation = None
 
 class Landsat(Satellite):
     """Class of Landsat imagery

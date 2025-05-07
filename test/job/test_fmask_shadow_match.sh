@@ -1,11 +1,13 @@
 #!/bin/bash
 #SBATCH -J shadow
-#SBATCH --partition=general
+#SBATCH --partition=priority
+#SBATCH --account=zhz18039
 #SBATCH --mem-per-cpu=30G
 #SBATCH --constraint='epyc128'
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --array 1-336
+#SBATCH --cpus-per-task=1
+#SBATCH --array 1-400
 #SBATCH -o log/%x-out-%A_%4a.out
 #SBATCH -e log/%x-err-%A_%4a.err
 
@@ -21,7 +23,7 @@ cd ../
 # one for having thermal band, and one for not having thermal band
 FOLDER_SRC='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/ReferenceDataset/L8BIOME' #
 FOLDER_DES='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Test/L8BIOME' # end names will be provided afterward
-python test_fmask_shadow_match.py --ci=$SLURM_ARRAY_TASK_ID --cn=$SLURM_ARRAY_TASK_MAX --resource=$FOLDER_SRC --destination=$FOLDER_DES
+python test_fmask_shadow_match.py --ti=$SLURM_ARRAY_TASK_ID --tc=$SLURM_ARRAY_TASK_MAX --np=$SLURM_CPUS_PER_TASK --resource=$FOLDER_SRC --destination=$FOLDER_DES
 
 echo 'Finished!'
 exit

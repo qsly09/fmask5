@@ -350,7 +350,7 @@ def mask_water(data: Data, obsmask, snow, swo_erosion_radius = 0):
         swo = data.get("swo")  # to get the layer
         if swo_erosion_radius > 0:
             # erosion the swo layer to exclude narrow water bodies, like rivers. in this case, we do not reply on the swo layer to mask water pixels, but the spectral rules still work on these pixels
-            swo[~utils.erode(swo>0, swo_erosion_radius)]= 0
+            swo[~utils.erode(swo>0, swo_erosion_radius)]= 0 # note this will change the orginal layer!
         # low level (17.5%) to exclude the commssion errors as water.
         # 5% tolerances.
         swo_thrd = np.percentile(swo[water], C.LOW_LEVEL, method="midpoint") - 5
@@ -488,7 +488,8 @@ def probability_land_brightness(data, clear_land):
     return prob_land_bright
 
 
-def flood_fill_shadow(nir_full, swir1_full, abs_land, obsmask, threshold=0.02, nir_background=None, swir1_background=None):
+def flood_fill_shadow(nir_full, swir1_full, abs_land, obsmask,
+                      threshold=0.15, nir_background=None, swir1_background=None):
     """
     Masks potential shadow areas in the input images based on flood fill method.
 
@@ -515,6 +516,42 @@ def flood_fill_shadow(nir_full, swir1_full, abs_land, obsmask, threshold=0.02, n
         swir1_background = np.percentile(swir1_full[abs_land], C.LOW_LEVEL)
     else:
         swir1_background = swir1_full[obsmask].min() # avoiding negative values
+    
+    nir_filled = utils.imfill(nir_full, obsmask, fill_value=nir_background)
+    swir1_filled = utils.imfill(swir1_full, obsmask, fill_value=swir1_background)
+
+    return (
+        np.minimum((nir_filled - nir_full)/nir_filled,  (swir1_filled - swir1_full)/swir1_filled) > threshold
+    )
+
+def flood_fill_shadow2(nir_full, swir1_full, abs_land, obsmask, threshold=0.02, nir_background=None, swir1_background=None):
+    """
+    Masks potential shadow areas in the input images based on flood fill method.
+
+    Parameters:
+        nir_full (numpy.ndarray): Array representing the NIR band image.
+        swir1_full (numpy.ndarray): Array representing the SWIR 1 band image.
+        abs_land (numpy.ndarray): Array representing the land mask.
+        obsmask (numpy.ndarray): Array representing the observation mask.
+        thershold (float, optional): The threshold value for the shadow mask. Defaults to 0.02.
+
+    Returns:
+        numpy.ndarray: Array representing the mask of potential shadow areas.
+    """
+
+    # mask potential shadow using flood fill method in NIR and SWIR 1 band
+    # making surface data >=0 for the array
+    # nir_full = np.maximum(0, nir_full)  # avoiding negative values
+    # swir1_full = np.maximum(0, swir1_full)  # avoiding negative values
+    if nir_background is None:
+        nir_background = np.percentile(nir_full[abs_land], C.LOW_LEVEL)
+    else:
+        nir_background = nir_full[obsmask].min() # avoiding negative values
+    if swir1_background is None:
+        swir1_background = np.percentile(swir1_full[abs_land], C.LOW_LEVEL)
+    else:
+        swir1_background = swir1_full[obsmask].min() # avoiding negative values
+        
     return (
         np.minimum(
             utils.imfill(nir_full, obsmask, fill_value=nir_background)
@@ -599,7 +636,10 @@ def compute_cloud_probability_layers(image, min_clear, swo_erosion_radius=0, wat
 
     # Seperate absolute clear mask into land and waster groups
     # mask water no mater if we go further to analyze the prob.
-    water = mask_water(image.data, image.obsmask, snow=snow, swo_erosion_radius=swo_erosion_radius)
+    if swo_erosion_radius < 0: # should be in meters, if the swo_erosion_radius is negative, it means the radius is in meters
+        water = mask_water(image.data, image.obsmask, snow=snow, swo_erosion_radius = int(np.abs(np.ceil(swo_erosion_radius / image.resolution))))
+    else: # should be in pixels, if the swo_erosion_radius is positive, it means the radius is in pixels
+        water = mask_water(image.data, image.obsmask, snow=snow, swo_erosion_radius = swo_erosion_radius)
 
     # that will be used if the thermal band is available
     surface_low_temp, surface_high_temp = None, None
@@ -631,7 +671,9 @@ def compute_cloud_probability_layers(image, min_clear, swo_erosion_radius=0, wat
             prob_cirrus = 0
         
         # erode the water pixels to exclude the narrow water bodies, like rivers and coastal lines
-        if water_erosion_radius > 0:
+        if water_erosion_radius < 0: # should be in meters, if the swo_erosion_radius is negative, it means the radius is in meters
+            water = utils.erode(water, int(np.abs(np.ceil(swo_erosion_radius / image.resolution))))
+        elif water_erosion_radius > 0: # should be in pixels, if the swo_erosion_radius is positive, it means the radius is in pixels
             water = utils.erode(water, water_erosion_radius)
 
         abs_land = np.logical_and(~water, abs_clr)
@@ -903,7 +945,6 @@ def clear_probability(prob, clear):
     """
     return np.percentile(prob[clear], C.HIGH_LEVEL)
 
-
 # define functions inside
 def shift_by_sensor(coords, height, view_zenith, view_azimuth, resolution):
     """
@@ -1001,7 +1042,7 @@ def shift_by_solar(coords, height, solar_elevation, solar_azimuth, resolution):
     return coords
 
 
-def project_dem2plane2(ele, solar_elevation, solar_azimuth, resolution, mask_filled):
+def project_dem2plane4(ele, solar_elevation, solar_azimuth, resolution, mask_filled):
     """
     Projects a digital elevation model (DEM) to a plane based on solar elevation and azimuth.
 
@@ -1024,8 +1065,8 @@ def project_dem2plane2(ele, solar_elevation, solar_azimuth, resolution, mask_fil
     )  # relative elevation 0.1 is to avoid the outlier
     ele[ele < 0] = 0 # minimum elevation is 0 after do the relative elevation
     # get the coordinates of all the dem pixels
-    # image_coords = np.argwhere(np.ones_like(ele, dtype=bool))
-    image_coords = np.indices(ele.shape).reshape(2, -1).T  # Faster than np.argwhere
+    image_coords = np.argwhere(np.ones_like(ele, dtype=bool))
+    # image_coords = np.indices(ele.shape).reshape(2, -1).T  # Faster than np.argwhere
     # projection along the solar direction
     plane_coords = shift_by_solar(
         image_coords.copy(), # do not vary the values
@@ -1076,7 +1117,7 @@ def project_dem2plane2(ele, solar_elevation, solar_azimuth, resolution, mask_fil
     return PLANE2IMAGE_ROW, PLANE2IMAGE_COL, PLANE_OFFSET
 
 
-def project_dem2plane(ele, solar_elevation, solar_azimuth, resolution):
+def project_dem2plane(ele, sensor_zenith, sensor_azimuth, solar_elevation, solar_azimuth, resolution):
     """
     Projects a Digital Elevation Model (DEM) onto a plane based on solar elevation and azimuth angles.
     uint16 is used for storing the plane coordinates to avoid overflow.
@@ -1093,23 +1134,71 @@ def project_dem2plane(ele, solar_elevation, solar_azimuth, resolution):
     """
 
     # get the coordinates of all the dem pixels
-    # image_coords = np.argwhere(np.ones_like(ele, dtype=bool))
-    image_coords = np.indices(ele.shape).reshape(2, -1).T  # Faster than np.argwhere
+    image_coords = np.argwhere(np.ones_like(ele, dtype=bool))
+    # image_coords = np.indices(ele.shape).reshape(2, -1).T  # Faster than np.argwhere
     # Separate coordinates for odd and even indices for both row and column, in order to reduce it happens that mutiple image_coords for the same plane_coords (projected)
     image_coords_odd = image_coords[(image_coords[:, 0] % 2 == 1) & (image_coords[:, 1] % 2 == 1)]  # Odd rows and odd columns
     image_coords_even = image_coords[(image_coords[:, 0] % 2 == 0) & (image_coords[:, 1] % 2 == 0)]  # Even rows and even columns
     
+    # adjust the shift by sensor
+    
+    shifts = []
+    n_total = image_coords_odd.shape[0]
+    for i in range(0, n_total, 1000000): # batch_size = 1000000
+        batch = image_coords_odd[i:min(i + 1000000, n_total)]
+        shifted = shift_by_sensor(batch.copy(),
+                                  ele[batch[:, 0], batch[:, 1]],
+                                  np.deg2rad(sensor_zenith[batch[:, 0], batch[:, 1]]), 
+                                  np.deg2rad(sensor_azimuth[batch[:, 0], batch[:, 1]]), 
+                                  resolution)
+        shifts.append(shifted)
+    image_coords_odd_shift = np.vstack(shifts)
+    del shifts, batch
+
+    # image_coords_odd_shift = shift_by_sensor(
+    #     image_coords_odd.copy(),
+    #     ele[image_coords_odd[:, 0], image_coords_odd[:, 1]],
+    #     sensor_zenith[image_coords_odd[:, 0], image_coords_odd[:, 1]],
+    #     sensor_azimuth[image_coords_odd[:, 0], image_coords_odd[:, 1]],
+    #     resolution,
+    # )
+    
     # Projection along the solar direction for the first set of image coordinates
     plane_coords_odd = shift_by_solar(
-        image_coords_odd.copy(), # do not vary the values
+        image_coords_odd_shift, # do not vary the values
         ele[image_coords_odd[:, 0], image_coords_odd[:, 1]],
         np.deg2rad(solar_elevation).copy(),  # Convert to radiance
         np.deg2rad(solar_azimuth).copy(),  # Convert to radiance
         resolution,
     )
+    
+    # # adjust the shift by sensor
+    # image_coords_even_shift = shift_by_sensor(
+    #     image_coords_even.copy(),
+    #     ele[image_coords_even[:, 0], image_coords_even[:, 1]],
+    #     sensor_zenith[image_coords_even[:, 0], image_coords_even[:, 1]],
+    #     sensor_azimuth[image_coords_even[:, 0], image_coords_even[:, 1]],
+    #     resolution,
+    # )
+    
+    # adjust the shift by sensor
+    shifts = []
+    n_total = image_coords_even.shape[0]
+    for i in range(0, n_total, 1000000): # batch_size = 1000000
+        batch = image_coords_even[i:min(i + 1000000, n_total)]
+        shifted = shift_by_sensor(batch.copy(), 
+                                  ele[batch[:, 0], batch[:, 1]], 
+                                  np.deg2rad(sensor_zenith[batch[:, 0], batch[:, 1]]), 
+                                  np.deg2rad(sensor_azimuth[batch[:, 0], batch[:, 1]]), 
+                                  resolution)
+        shifts.append(shifted)
+    image_coords_even_shift = np.vstack(shifts)
+    del shifts, batch
+    
+    
     # Projection along the solar direction for the second set of image coordinates
     plane_coords_even = shift_by_solar(
-        image_coords_even.copy(), # do not vary the values
+        image_coords_even_shift, # do not vary the values
         ele[image_coords_even[:, 0], image_coords_even[:, 1]],
         np.deg2rad(solar_elevation).copy(),  # Convert to radiance
         np.deg2rad(solar_azimuth).copy(),  # Convert to radiance
@@ -1412,20 +1501,22 @@ def match_cloud2shadow(
     cloud_regions,
     cloud_objects,
     pshadow,
+    water,
     mask_filled,
     view_zenith,  # in degree
     view_azimuth,  # in degree
     solar_elevation,  # in degree
     solar_azimuth,  # in degree
     resolution,
-    similarity=0.10,
-    sampling_cloud=20000, # number of sampling pixels to find the shadow, in order to speed up the process. the value 0 means to use all the pixels
+    similarity=0.1,
+    similarity_tolerance= 0.95,  # the tolerance of the similarity, in order to speed up the process
+    penalty_weight = 0.9,  # the penalty for the cloud shadow matching to the regions that we do not understand the underlanding surface, like out-of-image and other identified clouds
+    sampling_cloud=80000, # number of sampling pixels to find the shadow, in order to speed up the process. the value 0 means to use all the pixels
     thermal=None,
     surface_temp_low=None,
     surface_temp_high=None,
     ele=None,
-    # PLANE2IMAGE_ROW=None,
-    # PLANE2IMAGE_COL=None,
+    ele_base = 0,
     PLANE2IMAGE_ROW_ODD=None,
     PLANE2IMAGE_COL_ODD=None,
     PLANE2IMAGE_ROW_EVEN=None,
@@ -1439,11 +1530,13 @@ def match_cloud2shadow(
     Majoe modifications made, compared to Fmask 4.6:
     - All the similarity thresholds are 0.3, after testing 
     - Reduced sampling cloud to 60000 from 1000000, to speed up the process, but give higher weights to the pixels at the cloud boundary based on the pixel distance to the centroid
+    - Adjusted the penalty weight to 0.1, to reduce the penalty for the cloud shadow matching to the regions that we do not understand the underlanding surface, like out-of-image and other identified clouds
     - In this case, shadow masking over water was taken back.
     
     Args:
         cloud_objects (ndarray): Binary cloud mask.
         pshadow (ndarray): shadow mask with weight.
+        water (ndarray): Water mask, which is used to punish the pixels projected over water because water is easily identified as potential shadow area.
         mask_filled (ndarray): Filled mask.
         view_zenith (ndarray): View zenith angles in degrees.
         view_azimuth (ndarray): View azimuth angles in degrees.
@@ -1462,9 +1555,9 @@ def match_cloud2shadow(
     # make sure the random sampling is the same fore reproducibility
     np.random.seed(C.RANDOM_SEED)
     pcloud = cloud_objects > 0
-    pshadow[pcloud] = 0  # exclude cloud from the potential shadow
-
-    # pcloud[mask_filled] = 0  # exclude the filled pixels from the cloud mask for sure
+    # pshadow[pcloud] = 0  # exclude cloud from the potential shadow; # we like potential shadow, not cloud,
+    # pcloud[pshadow] = 0 # when counnting the similarity, we need to exclude the shadow pixels from the cloud mask, since we may punish the pixels over clouds
+    
     # check the thermal band is included
     thermal_included = thermal is not None
     # thermal_included = False # turn it off, in order to test the cloud shadow matching without thermal band. This is suitable for Sentinel-2.
@@ -1479,7 +1572,7 @@ def match_cloud2shadow(
     # max similarity between the cloud object and the cloud shadow object
     similarity_min = similarity  # thershold of approving shadows
     similarity_max = 0.95
-    similarity_buffer = 0.95
+    # similarity_buffer = similarity_tolerance #  0.9 #  0.95
     num_close_clouds = 14 # see MFask, Qiu et al., 2017, RSE 
 
     # number of inward pixes (90m) for cloud base temperature
@@ -1511,12 +1604,20 @@ def match_cloud2shadow(
     # DEM projection
     if dem_proj:
         plane_shape = PLANE2IMAGE_ROW_ODD.shape # the shape of the plane projection, which is same as others
-
+        cloud_surface_ele = np.percentile(ele[~mask_filled], 0.1) # 0.1 is to avoid the outlier
+        
     if neighbor_height:
         # create a matrix to store the distance between the cloud objects
         record_cloud_centroids = np.array([cloud.centroid for cloud in cloud_regions])
         # cloud height
         record_cloud_base_heights = np.zeros(len(cloud_regions), dtype=np.float32)
+
+    # record the cloud base height for the first cloud object
+    # intergrate water into the filled layer, which will be punished if the shadow is projected over water
+    mask_filled[water] = 1 # will be punished if the shadow is projected over water
+    mask_filled[pcloud] = 1 # include the cloud pixels into the filled mask for sure, which will be punished by the shadow matching if overlapped with the other cloud objects
+    mask_filled[pshadow] = 0 # exclude the shadow pixels from the filled mask for sure, which will not be punished by the shadow matching
+    # pcloud[mask_filled] = 0  # exclude the filled pixels from the cloud mask for sure
 
     # iterate the cloud objects by enumate loop
     for icloud, cloud in enumerate(cloud_regions):
@@ -1532,7 +1633,7 @@ def match_cloud2shadow(
         cloud_coords = cloud.coords.copy()
         
         # in meters. 200m to 12km for cloud height usually
-        cloud_height_min, cloud_height_max = 200.00, 12000.00
+        cloud_height_min, cloud_height_max = 200.00 + ele_base, 12000.00 + ele_base # over the base elevation in the imagery
  
         # Calculate the cloud radius (assuming a circular cloud)
         cloud_radius = np.sqrt(cloud.area / (2 * np.pi))  # in pixels
@@ -1559,9 +1660,19 @@ def match_cloud2shadow(
 
         if dem_proj:
             # get the surface elevation underneath the cloud object
-            cloud_surface_ele = np.percentile(
-                ele[cloud_coords[:, 0], cloud_coords[:, 1]], C.HIGH_LEVEL
-            )
+            # cloud_surface_ele = np.percentile(
+            #    ele[cloud_coords[:, 0], cloud_coords[:, 1]], C.HIGH_LEVEL
+            #)
+            # Compared to Fmask 4.6, we use the mininum elevation of the cloud object to estimate the cloud surface elevation, since we have less commisison from snow/ice right now
+            # cloud_surface_ele_max = np.percentile(
+            #    ele[cloud_coords[:, 0], cloud_coords[:, 1]],  99.9 # 99.9 to avoid the DEM outliers
+            # )
+            # no need to use the percentile, since we have already used the 0.1 percentile to avoid the outliers
+            cloud_surface_ele_max = np.max(ele[cloud_coords[:, 0], cloud_coords[:, 1]])
+            
+            # cloud must be higher than the surface elevation connected, for example, cloud around high mountains
+            # convert cloud_surface_ele_max to float
+            cloud_height_min = max(float(cloud_surface_ele_max), cloud_height_min)
 
         # recording variable for similarity between the cloud object and the cloud shadow
         record_similiarity = 0.0
@@ -1616,24 +1727,6 @@ def match_cloud2shadow(
                     (coords[:, 0] >= 0) & (coords[:, 0] < plane_shape[0]) &   # row within bounds
                     (coords[:, 1] >= 0) & (coords[:, 1] < plane_shape[1])     # column within bounds
                 )]  # remove the pixels out of the image (reference plane)
-                # convert the coords from the plane to the image which keep same array structure as the coords
-                # coords = np.column_stack((PLANE2IMAGE_ROW[coords[:, 0], coords[:, 1]],
-                #                          PLANE2IMAGE_COL[coords[:, 0], coords[:, 1]]))
-                
-                # Decode the row and column indices for PLANE2IMAGE_ROW and PLANE2IMAGE_COL, and stack odd and even coordinates together
-                # Fetch the values from the mapping arrays once
-                # plane2image_row_vals = PLANE2IMAGE_ROW[coords[:, 0], coords[:, 1]]
-                # plane2image_col_vals = PLANE2IMAGE_COL[coords[:, 0], coords[:, 1]]
-                # # Compute the odd and even parts separately
-                # row_odd, row_even = divmod(plane2image_row_vals, 10000)
-                # col_odd, col_even = divmod(plane2image_col_vals, 10000)
-                # coords = np.column_stack((np.concatenate((row_odd, row_even)), 
-                #                         np.concatenate((col_odd, col_even))))
-                # Stack the results efficiently
-                # row_odd, row_even = PLANE2IMAGE_ROW[coords[:, 0], coords[:, 1], :]
-                # col_odd, col_even = PLANE2IMAGE_COL[coords[:, 0], coords[:, 1], :]
-                # coords = np.vstack((np.column_stack((PLANE2IMAGE_ROW[coords[:, 0], coords[:, 1]] // 10000, PLANE2IMAGE_COL[coords[:, 0], coords[:, 1]] // 10000)),
-                #                    np.column_stack((PLANE2IMAGE_ROW[coords[:, 0], coords[:, 1]] % 10000 , PLANE2IMAGE_COL[coords[:, 0], coords[:, 1]] % 10000))))
 
                 # Stack the odd and even coordinates vertically
                 coords = np.concatenate((np.hstack((PLANE2IMAGE_ROW_ODD[coords[:, 0], coords[:, 1]].reshape(-1, 1), PLANE2IMAGE_COL_ODD[coords[:, 0], coords[:, 1]].reshape(-1, 1))),
@@ -1664,26 +1757,29 @@ def match_cloud2shadow(
             )  # that include other clouds and clear pixels
             num_match2shadow = np.sum(
                 shadow_projected * pshadow[coords[:, 0], coords[:, 1]]
-            )  # here shadow_mask_binary has been merged with potential cloud and potential shadow together prior to
-            num_match2cloud = np.count_nonzero(
-                shadow_projected & pcloud[coords[:, 0], coords[:, 1]]
-            )  # here cloud_mask_binary has been merged with potential cloud and potential shadow together prior to
+            )  # here * used to consider multiply potential shadow layers, i.e, unet shadow plus filled shadow
+            #num_match2cloud = np.count_nonzero(
+            #    shadow_projected & pcloud[coords[:, 0], coords[:, 1]]
+            #)  # here cloud_mask_binary has been merged with potential cloud and potential shadow together prior to
             num_match2filled = np.count_nonzero(
                 shadow_projected & mask_filled[coords[:, 0], coords[:, 1]]
             )  # here mask_filled has been merged with potential cloud and potential shadow together prior to
 
-            # 0.5 is used to punlish the projected pixels over cloud or filled layer, where there is no way to determine the potential cloud shadow
-            num_pixels_matched = (
-                num_match2shadow
-                + 0.5 * (num_match2cloud + num_match2filled)
-                + num_out_image
-            )
+            # simplify the similarity calculation with one line
+            # 0.5 is used to punlish the projected pixels over cloud or filled layer, where there is no way to determine the potential cloud shadow:
+            # num_match2shadow + 0.5 * (num_match2cloud + num_match2filled) + num_out_image
+            # total number that is the total pixel (exclude original cloud): np.count_nonzero(shadow_projected) + num_out_image
+            # C.EPS is used to avoid the division by zero
+            # + num_out_image
+            # similarity_matched = (num_match2shadow + (1.0 - penalty_weight) * (num_match2cloud + num_match2filled + num_out_image))/(np.count_nonzero(shadow_projected) + num_out_image + C.EPS)
+            similarity_matched = (num_match2shadow + (1.0 - penalty_weight) * (num_match2filled + num_out_image))/(np.count_nonzero(shadow_projected) + num_out_image + C.EPS)
 
-            # number that is the total pixel (exclude original cloud)
-            num_pixels_total = np.count_nonzero(shadow_projected) + num_out_image
-
-            # similarity
-            similarity_matched = num_pixels_matched / (num_pixels_total + C.EPS)
+            # if the estimated height is over the record_close_cloud_base_height, we punish the similarity, with the ratio of the neigbor cloud height to the current cloud height
+            # if the record_close_cloud_base_height is not zero, it means we have found the cloud shadow, in the previous clouds
+            # if (record_close_cloud_base_height > 0) and (cloud_base_height > record_close_cloud_base_height):
+            #     similarity_matched = similarity_matched * (
+            #         record_close_cloud_base_height/cloud_base_height
+            #     )
 
             # if we have found the cloud shadow, and the neighbor cloud height is lower than the previous one, then stop the iteration
             if not (
@@ -1693,7 +1789,7 @@ def match_cloud2shadow(
             ):
                 # update the similarity recorded in this iteration
                 if (
-                    similarity_matched >= record_similiarity * similarity_buffer # tolerance for the similarity with 0.95
+                    similarity_matched >= record_similiarity * similarity_tolerance # tolerance for the similarity with 0.95
                     and cloud_base_height < cloud_height_max - cloud_height_interval # not reach the maximum height
                     and record_similiarity < similarity_max # not reach the maximum similarity
                 ):
@@ -1710,7 +1806,7 @@ def match_cloud2shadow(
                         if cloud_base_height < record_close_cloud_base_height:
                             if (
                                 similarity_matched >= record_similiarity
-                                or similarity_matched >= similarity_max # within the tolerance of the similarity
+                                # or similarity_matched >= similarity_max # within the tolerance of the similarity
                             ):
                                 record_similiarity = similarity_matched
                                 record_cloud_base_height = cloud_base_height
@@ -1813,6 +1909,8 @@ def match_cloud2shadow(
             # record_num_matched = record_num_matched + 1
             # stop the iteration
             break
+    # exclude cloud pixels
+    shadow_mask_matched[cloud_objects > 0] = False
     return shadow_mask_matched, cloud_mask_matched
 
 
@@ -1839,15 +1937,25 @@ class Physical:
     options_temp = [True, False]
     options_cirrus = [True, False]
 
-    swo_erosion_radius = 0  # the radius of the erosion for the swo water layer to remove the small water pixels, such as narrow river
-    water_erosion_radius = 0  # the radius of the erosion for the water layer to remove the small water pixels, such as narrow river
-    # the minimum number of clear pixels to start up the cloud probability model
-    # as well as the minimum number for representing clear surface pixels, which is used to normalize the thermal band
-    min_clear = 40000
-    
-    sampling_cloud = 60000  # also optimal after testing it based on L8BIOME dataset. number of sampling pixels to find the cloud, in order to speed up the process. the value 0 means to use all the pixels
-    similarity = 0.3  # min similarity between the cloud object and the cloud shadow object
+    # we do not use this option right now, since we do not want to change the physical rules
+    # erosion of water mask, which is used to remove the small water pixels, such as narrow river and ponds. For those, we do not need to get based on the gswo dataset, just use the spectral test
+    # after testing, we only used the water_erosion_radius
+    swo_erosion_radius = 0 # minus "-" means to erosion unit is meters, and the positive value means the unit is pixels; which was used to test different units; 0 will not change the water mask
+    # default value is 965 meters, which the 95th percentile of global river widths recorded in GRWL v1.1 dataset (Allen and Pavelsky, 2018, Science)
+    water_erosion_radius = 0 # minus "-" means to erosion unit is meters, and the positive value means the unit is pixels; which was used to test different units (swo + spectral test); this only is used to calculate the cloud probability, not the final water mask.
 
+    # the minimum number of clear pixels to start up the cloud probability model, as well as the minimum number for representing clear surface pixels, which is used to normalize the thermal band
+    min_clear = 40000
+    # minimum number of cloud pixels to start up the cloud shadow matching
+    sampling_cloud = 80000
+    # min similarity between the cloud object and the cloud shadow object
+    similarity = 0.1
+    # the tolerance of the similarity, in order to speed up the process
+    similarity_tolerance = 0.95
+    # the penalty for the cloud shadow matching to the regions that we do not understand the underlanding surface, like out-of-image and other identified clouds, as well as water pixels.
+    # the water pixels are included here because they are easily identified as potential shadow area in land imagery
+    penalty_weight = 0.9
+    
     @property
     def abs_clear(self):
         """clear pixels
@@ -1868,7 +1976,7 @@ class Physical:
             Args:
                 np.ndarray: A 2D boolean array where True indicates clear land pixels.
         """
-        _abs_clear_land = np.logical_and(~self.water, self.abs_clear)
+        _abs_clear_land = np.logical_and(~self.water, self.abs_clear) # do not need use the eroded water
         if (
             np.count_nonzero(_abs_clear_land) < self.min_clear
         ):  # in case we do not have enought clear land pixels
@@ -2171,8 +2279,6 @@ class Physical:
                                 mask_absclear_water,
                                 adjusted=adjusted,
                             )
-                            # mask_prob[self.water] = mask_prob_water[self.water] # update the cloud probability for water by replacing
-
                             # only update the pixels where the prob. over water is higher than the prob. over land
                             # which is the same as the previous Fmask, where the logistical math 'or' is used.
                             # to mask the thin cloud over the water just.
@@ -2261,6 +2367,8 @@ class Physical:
         cloud_objects,
         cloud_regions,
         pshadow,
+        water,
+        thermal_adjust=True,
     ):
         """
         Match shadows by identified clouds.
@@ -2269,44 +2377,60 @@ class Physical:
             cloud_objects (ndarray): Binary cloud object mask.
             cloud_regions (list): List of cloud regions.
             pshadow (ndarray, number): Potential shadow layer.
+            water (ndarray): Water mask.
 
         Returns:
             tuple: A tuple containing the projected cloud shadows and the updated cloud layer.
         """
         # convert to relative elevation to the mininum elevation within the imagery
         dem_relative = self.image.data.get("dem")
-        dem_relative = dem_relative - np.percentile(dem_relative[self.image.obsmask], 0.1)  # relative elevation 0.1 is to avoid the outlier
+        dem_base = np.percentile(dem_relative[self.image.obsmask], 0.1)  # relative elevation 0.1 is to avoid the outlier
+        dem_relative = dem_relative - dem_base
+
         dem_relative[dem_relative < 0] = 0 # minimum elevation is 0 after do the relative elevation
+        sensor_zenith = self.image.read_angle("SENSOR_ZENITH", unit="degree")
+        sensor_azimuth = self.image.read_angle("SENSOR_AZIMUTH", unit="degree")
         # project the dem to the reference plane, at the first step
         plane2image_row_odd, plane2image_col_odd, plane2image_row_even, plane2image_col_even, plane_offset = project_dem2plane(
             dem_relative,
+            sensor_zenith,
+            sensor_azimuth,
             self.image.sun_elevation,
             self.image.sun_azimuth,
             self.image.resolution,
         )
-        sensor_zenith = self.image.read_angle("SENSOR_ZENITH", unit="degree")
-        sensor_azimuth = self.image.read_angle("SENSOR_AZIMUTH", unit="degree")
         
         if C.MSG_FULL:
             print(">>> matching cloud shadows")
         
+        # only when we have the data for thermal band, we can use thermal band to narrow the height of the cloud and estimate 3D cloud object
+        if thermal_adjust:
+            # get the thermal band data
+            thermal = self.image.data.get("tirs1").copy()
+        else:
+            thermal = None
+        self.image.clean_data() # clean the data to save memory
         # call the function defined outside the class
         shadow_last, _ = match_cloud2shadow(
             cloud_regions,
             cloud_objects,
             pshadow,
-            self.image.filled,
+            water,
+            self.image.filled.copy(), # copy it, since we will modify it with adding water layer to punish the shadow over water
             sensor_zenith,
             sensor_azimuth,
             self.image.sun_elevation,
             self.image.sun_azimuth,
             self.image.resolution,
             similarity=self.similarity,
+            similarity_tolerance=self.similarity_tolerance,
+            penalty_weight=self.penalty_weight,
             sampling_cloud=self.sampling_cloud,
-            thermal=self.image.data.get("tirs1"),
+            thermal=thermal,
             surface_temp_low=self.surface_temp_low,
             surface_temp_high=self.surface_temp_high,
             ele=dem_relative,
+            ele_base=dem_base,
             PLANE2IMAGE_ROW_ODD=plane2image_row_odd,
             PLANE2IMAGE_COL_ODD=plane2image_col_odd,
             PLANE2IMAGE_ROW_EVEN=plane2image_row_even,
