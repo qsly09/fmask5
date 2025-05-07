@@ -64,7 +64,7 @@ def process(resource, destination, ci, cn):
     print(f"Resource: {resource}")
     print(f"Destination: {destination}")
 
-    test_code = 5
+    test_code = 6
 
     if test_code == 0:
         # test #01
@@ -124,13 +124,13 @@ def process(resource, destination, ci, cn):
         pshadows = [0.15]
     elif test_code == 6:
         similarity_tolerances = [0.95] # the tolerance of the similarity, in order to speed up the process
-        penalty_weights = [0] # the penalty for the cloud shadow matching to the regions that we do not understand the underlanding surface, like out-of-image and other identified clouds
+        penalty_weights = [0.9] # the penalty for the cloud shadow matching to the regions that we do not understand the underlanding surface, like out-of-image and other identified clouds
         similaritys = [0.1] # after testing, 0.3 is acceptable for L8Biome dataset
         thermal_includes = [0, 1] # yes or no, if the thermal band is included in the cloud shadow matching process
-        sampling_clouds = [40000]
+        sampling_clouds = [80000]
         buffers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] # the buffer size for the cloud shadow matching process
-        connects = [5] # after we get the optimal parameters from the test above, we do the test one more time.
-
+        connects = [3] # after we get the optimal parameters from the test above, we do the test one more time.
+        pshadows = [0.15]
     # below images does not contain cloud shadow layer in L8Biome dataset
     IMAGE_LIST_NONSHADOW = ['L895CLOUD', # all the dataset does not have the cloud shadow layer
                             'LC08_L1GT_012055_20130721_20200912_02_T2',
