@@ -147,10 +147,10 @@ Earlier versions of the Fmask tools offered only a physical-rule-based cloud det
 ## Contributing
 We welcome and encourage contributions to Fmask! There are two primary ways to contribute:
 
-## Report Issues or Suggestions
+#### Report Issues or Suggestions
 If you happen to have any issues or suggestions for improving Fmask, we encourage you to open an issue or submit a pull request.
 
-## Share Problematic Images
+#### Share Problematic Images
 We are actively collecting examples of images that have not been processed accurately by the current version of Fmask. If you come across such images, please share the image ID with us on [this page](https://github.com/qsly09/fmask5/issues/1). The collected images will be used to refine the inner machine learning models, improving their accuracy and reliability in future versions.
 
 ## Known Issues
