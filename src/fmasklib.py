@@ -1408,6 +1408,9 @@ class Fmask(object):
             self.physical.water,
             thermal_adjust = thermal_adjust
         )
+        
+        # delete self.cloud_region, self.cloud_object, pshadow
+        del self.cloud_region, self.cloud_object, pshadow
 
     def display_fmask(self, endname = "", path=None, skip=True):
         """display the fmask, with clear, cloud, shadow, and fill"""

@@ -520,8 +520,8 @@ def fmask_upl(path_image, dcloud=0, dshadow=5, dsnow = 0, destination = None, sk
 
 @click.command()
 @click.option("--model", "-m", type=str, help="Cloud detection model to use.", default="UPL")
-@click.option("--dcloud", "-c", type=int, help="Dilation for cloud mask in pixels", default=5)
-@click.option("--dshadow", "-s", type=int, help="Dilation for shadow mask in pixels", default=7)
+@click.option("--dcloud", "-c", type=int, help="Dilation for cloud mask in pixels", default=3)
+@click.option("--dshadow", "-s", type=int, help="Dilation for shadow mask in pixels", default=5)
 @click.option("--dsnow", "-n", type=int, help="Dilation for shadow mask in pixels", default=0)
 @click.option(
     "--imagepath", "-i",
@@ -533,12 +533,12 @@ def fmask_upl(path_image, dcloud=0, dshadow=5, dsnow = 0, destination = None, sk
     "--output", "-o",
     type=str,
     help="Destination directory for results. If not provided, results are saved in the image directory.",
-    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/LandsatMaskCPU_Fmask500",
+    default="",
 )
 @click.option("--skip_existing", "-s", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Skip processing if results already exist (set to 0 to force generation).", default="no")
 @click.option("--save_metadata", "-md", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Save model metadata to a CSV file.", default="no")
-@click.option("--display_fmask", "-df", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Display and save the Fmask result as a PNG file.", default="yes")
-@click.option("--display_image", "-di", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Display and save color composite images as PNG files.", default="yes")
+@click.option("--display_fmask", "-df", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Display and save the Fmask result as a PNG file.", default="no")
+@click.option("--display_image", "-di", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Display and save color composite images as PNG files.", default="no")
 @click.option("--print_summary", "-ps", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Print Fmask summary including cloud, shadow, snow, and clear percentages.", default="no")
 def main(model, dcloud, dshadow, dsnow, imagepath, output, skip_existing, save_metadata, display_fmask, display_image, print_summary) -> None:
     print("************************************************")

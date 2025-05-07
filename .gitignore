@@ -29,7 +29,11 @@ data/s2iris.py
 model/job/
 model/train_rf_cloud.py
 model/train_unet_cloud.py
-figure/
+figure/record.py
+figure/collect_cloud_mask.py
+figure/output/
+figure/job/
+figure/__pycache__/
 validation/
 .ipynb_checkpoints/
 __pycache__/

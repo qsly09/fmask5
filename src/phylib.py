@@ -2406,7 +2406,10 @@ class Physical:
         # only when we have the data for thermal band, we can use thermal band to narrow the height of the cloud and estimate 3D cloud object
         if thermal_adjust:
             # get the thermal band data
-            thermal = self.image.data.get("tirs1").copy()
+            if self.image.data.exist("tirs1"):
+                thermal = self.image.data.get("tirs1").copy()
+            else:
+                thermal = None
         else:
             thermal = None
         self.image.clean_data() # clean the data to save memory

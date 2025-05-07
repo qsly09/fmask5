@@ -6,7 +6,7 @@
 #SBATCH --mem-per-cpu=30G
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --array 1-400
+#SBATCH --array 1-450
 #SBATCH -o log/%x-out-%A_%4a.out
 #SBATCH -e log/%x-err-%A_%4a.err
 
@@ -16,34 +16,34 @@ conda activate fmask
 echo $SLURMD_NODENAME # display the node name
 cd ../
 
-DCLOUD=0
+DCLOUD=3
 DSHADOW=5
 SAVEMETA='yes'
 DISPLAYFMASK='yes'
 DISPLAYIMG='yes'
 
 FOLDER_SRC='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/Sentinel2/' # 1350 cores in total
-FOLDER_DES='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/Sentinel2MaskCPU_Fmask501' # end names will be provided afterward
+FOLDER_DES='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/Sentinel2MaskCPU_Fmask500' # end names will be provided afterward
 MODEL='UPL'
 python fmask_batch.py --model=$MODEL --imagedir=$FOLDER_SRC --output=$FOLDER_DES --dcloud=$DCLOUD --dshadow=$DSHADOW --save_metadata=$SAVEMETA --ci=$SLURM_ARRAY_TASK_ID --cn=$SLURM_ARRAY_TASK_MAX --display_image=$DISPLAYIMG --display_fmask=$DISPLAYFMASK
 
 FOLDER_SRC='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/Landsat/' # 1350 cores in total
-FOLDER_DES='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/LandsatMaskCPU_Fmask501' # end names will be provided afterward
+FOLDER_DES='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset/LandsatMaskCPU_Fmask500' # end names will be provided afterward
 MODEL='UPL'
 python fmask_batch.py --model=$MODEL --imagedir=$FOLDER_SRC --output=$FOLDER_DES --dcloud=$DCLOUD --dshadow=$DSHADOW --save_metadata=$SAVEMETA --ci=$SLURM_ARRAY_TASK_ID --cn=$SLURM_ARRAY_TASK_MAX --display_image=$DISPLAYIMG --display_fmask=$DISPLAYFMASK
 
 FOLDER_SRC='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat89' # 1350 cores in total
-FOLDER_DES='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Fmask501' # end names will be provided afterward
+FOLDER_DES='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Fmask500' # end names will be provided afterward
 MODEL='UPL'
 python fmask_batch.py --model=$MODEL --imagedir=$FOLDER_SRC --output=$FOLDER_DES --dcloud=$DCLOUD --dshadow=$DSHADOW --save_metadata=$SAVEMETA --ci=$SLURM_ARRAY_TASK_ID --cn=$SLURM_ARRAY_TASK_MAX --display_image=$DISPLAYIMG --display_fmask=$DISPLAYFMASK
 
 FOLDER_SRC='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Sentinel2' # 1350 cores in total
-FOLDER_DES='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Fmask501' # end names will be provided afterward
+FOLDER_DES='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Fmask500' # end names will be provided afterward
 MODEL='UPL'
 python fmask_batch.py --model=$MODEL --imagedir=$FOLDER_SRC --output=$FOLDER_DES --dcloud=$DCLOUD --dshadow=$DSHADOW --save_metadata=$SAVEMETA --ci=$SLURM_ARRAY_TASK_ID --cn=$SLURM_ARRAY_TASK_MAX --display_image=$DISPLAYIMG --display_fmask=$DISPLAYFMASK
 
 FOLDER_SRC='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat47' # 1350 cores in total
-FOLDER_DES='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Fmask501' # end names will be provided afterward
+FOLDER_DES='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Fmask500' # end names will be provided afterward
 MODEL='LPL'
 python fmask_batch.py --model=$MODEL --imagedir=$FOLDER_SRC --output=$FOLDER_DES --dcloud=$DCLOUD --dshadow=$DSHADOW --save_metadata=$SAVEMETA --ci=$SLURM_ARRAY_TASK_ID --cn=$SLURM_ARRAY_TASK_MAX --display_image=$DISPLAYIMG --display_fmask=$DISPLAYFMASK
 
