@@ -2,7 +2,7 @@
 Author: Shi Qiu, Zhe Zhu
 Email: shi.qiu@uconn.edu, zhe@uconn.edu
 Affiliation: University of Connecticut
-Date: 2025-03-13
+Date: 2025-05-06
 Version: 5.0.0
 License: MIT
 
@@ -12,11 +12,11 @@ Description:
 Batch processing of Landsat and Sentinel-2 images using Fmask 5.0.0. See details at fmask.py
 
 Usage examples:
-- python fmask.py --model=UPL --dcloud=0 --dshadow=5 --imagedir='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset'
+- python fmask.py --model=UPL --dcloud=3 --dshadow=5 --imagedir='/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/HLSDataset'
 
 Command-line arguments:
 --model: the Fmask cloud detection model to use (PHY, GBM, UNT, LPL, UPU, LPU, UPL)
---dcloud: dilation for cloud mask in pixels; default is 0
+--dcloud: dilation for cloud mask in pixels; default is 3
 --dshadow: dilation for shadow mask in pixels; default is 5
 --dsnow: dilation for snow mask in pixels; default is 0
 --output: destination directory for results; if not provided, results are saved in the image's directory
@@ -27,7 +27,8 @@ Command-line arguments:
 --print_summary: print the summary of the Fmask result, including the percentage of cloud, shadow, snow, and clear; default is 'no'
 
 Changelog:
-- 5.0.0 (2025-05-7): Initial release.
+- 5.0.0 (2025-06-05): A 100-pixel-dilated U-Net layer is applied only for Landsat data postprocessing, as omission errors frequently occur near path/row boundaries. These errors are not observed in Sentinel-2 data, so the dilation is not applied there.
+- 5.0.0 (2025-05-07): Initial release.
 """
 
 
@@ -43,21 +44,21 @@ sys.path.append(
 from fmask import fmask_physical, fmask_lightgbm, fmask_unet, fmask_lpl,  fmask_lpu, fmask_upl, fmask_upu
 
 @click.command()
-@click.option("--model", "-m", type=str, help="Cloud detection model to use.", default="GBM")
-@click.option("--dcloud", "-c", type=int, help="Dilation for cloud mask in pixels", default=0)
+@click.option("--model", "-m", type=str, help="Cloud detection model to use.", default="UPL")
+@click.option("--dcloud", "-c", type=int, help="Dilation for cloud mask in pixels", default=3)
 @click.option("--dshadow", "-s", type=int, help="Dilation for shadow mask in pixels", default=5)
 @click.option("--dsnow", "-n", type=int, help="Dilation for shadow mask in pixels", default=0)
 @click.option(
     "--imagedir", "-i",
     type=str,
     help="Directory containing Landsat/Sentinel-2 images. Supports multiple images.",
-    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat47",
+    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Sentinel2",
 )
 @click.option(
     "--output", "-o",
     type=str,
     help="Destination directory for results. If not provided, results are saved in the resource directory.",
-    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Landsat47MaskCPU",
+    default="/gpfs/sharedfs1/zhulab/Shi/ProjectCloudDetectionFmask5/Validation/Sentinel2_results",
 )
 @click.option("--skip_existing", "-s", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Skip processing if results already exist (set to 0 to force generation).", default="yes")
 @click.option("--save_metadata", "-md", type=click.Choice(["yes", "no", "Yes", "No", "YES", "NO"]), help="Save model metadata to a CSV file.", default="yes")
