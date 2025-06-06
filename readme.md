@@ -50,9 +50,9 @@ To apply Fmask-UPL on a single Landsat 8-9 image (default cloud dilation: 3 pixe
 python fmask.py --imagepath /path/to/image_directory_landsat8-9 --model UPL
 ```
 
-To apply Fmask-UPL on a single Sentinel-2 image (recommanded cloud dilation: 0 pixels):
+To apply Fmask-UPL on a single Sentinel-2 image (recommended cloud dilation: 0 pixels):
 ```bash
-python fmask.py --imagepath /path/to/image_directory_Sentinel-2.SAFE --model UPL --dcloud 3
+python fmask.py --imagepath /path/to/image_directory_Sentinel-2.SAFE --model UPL --dcloud 0
 ```
 
 To apply Fmask-LPL on a single Landsat 4-7 image (default cloud dilation: 3 pixels):
