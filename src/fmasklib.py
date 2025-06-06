@@ -53,6 +53,7 @@ class Fmask(object):
 
     # the radius of erosion, unit: pixels, for the postprocessing of cloud objects, see Fmask 4.0 paper for details
     erosion_radius = 0  # the radius of erosion, unit: pixels
+    dilation_radius_unet = 0 # for Landsat only, since the unet does not work well for path/row data, but ok for sentinel-2
 
     # the buffer size of cloud, shadow, and snow in pixels (its resolution is the same as the image's resolution)
     buffer_cloud = 0
@@ -229,6 +230,7 @@ class Fmask(object):
             )
             self.resolution = 30  # spatial resolution that we processing the image
             self.erosion_radius = int(90/self.resolution)  # the radius of erosion, unit: pixels
+            self.dilation_radius_unet = 100 # unit: pixels
 
         elif spacecraft in ["LANDSAT_4", "LANDSAT_5", "LANDSAT_7"]:
             self.physical = Physical(
@@ -255,6 +257,8 @@ class Fmask(object):
             )
             self.resolution = 30  # spatial resolution that we processing the image
             self.erosion_radius = int(150/self.resolution)  # the radius of erosion, unit: pixels
+            self.dilation_radius_unet = 100 # unit: pixels
+
         elif spacecraft in ["SENTINEL-2A", "SENTINEL-2B", "SENTINEL-2C"]:
             self.physical = Physical(
                 predictors=P.s2_predictor_cloud_phy.copy(), woc=0.5, threshold=0.2, overlap=0.0
@@ -282,6 +286,7 @@ class Fmask(object):
 
             self.resolution = 20  # spatial resolution that we processing the image
             self.erosion_radius = int(90/self.resolution)   # the radius of erosion, unit: pixels
+            self.dilation_radius_unet = 0 # unit: pixels
 
     def init_pixelbase(
         self,
@@ -453,12 +458,11 @@ class Fmask(object):
         self.cloud = BitLayer(self.image.shape)
         self.cloud.append(self.physical.pcp)
 
-    def mask_shadow(self, postprocess, dilation = 100, min_area = 3, buffer2connect = 0, potential = "flood", topo="SCS", thermal_adjust = True, threshold = 0.15):
+    def mask_shadow(self, postprocess, min_area = 3, buffer2connect = 0, potential = "flood", topo="SCS", thermal_adjust = True, threshold = 0.15):
         """
         Masks the shadow in the image based on the given parameters.
         Parameters:
         postprocess (str): Indicates whether post-processing should be applied.
-        dilation (int): The size of the dilation to be applied. Only work for the UNet-based postprocessing. i.e., postprocess = "unet", dilate 100 pixels to reduce the omission errors from UNet, particularly for the small clouds and clouds at boundary
         min_area (int): The minimum area of the shadow to be considered.
         potential (str, optional): The method to be used for potential shadow detection. Defaults to "flood".
         thermal_include (bool, optional): Indicates whether thermal information should be included. Defaults to True, only for Landsat.
@@ -477,7 +481,7 @@ class Fmask(object):
                 print(">>> skipping cloud shadow matching due to high cloud coverage.")
             self.mask_shadow_rest()
         else:
-            self.create_cloud_object(postprocess=postprocess, dilation = dilation, min_area=min_area, buffer2connect=buffer2connect)
+            self.create_cloud_object(postprocess=postprocess, min_area=min_area, buffer2connect=buffer2connect)
             self.mask_shadow_geometry(potential=potential, topo=topo, thermal_adjust=thermal_adjust, threshold = threshold)
 
     def mask_shadow_rest(self):
@@ -547,7 +551,7 @@ class Fmask(object):
             )
 
     # post processing and generate cloud objects
-    def create_cloud_object(self, min_area = 3, postprocess = "none", dilation = 0, buffer2connect = 0):
+    def create_cloud_object(self, min_area = 3, postprocess = "none", buffer2connect = 0):
         """
         Erodes the false positive cloud pixels.
         Returns:
@@ -605,7 +609,7 @@ class Fmask(object):
                 print(">>> postprocessing with UNet-based elimination")
             # Use dilated version only if needed
             unet_cloud = self.cloud.first
-            unet_cloud = utils.dilate(unet_cloud, radius=dilation) if dilation > 0 else unet_cloud
+            unet_cloud = utils.dilate(unet_cloud, radius=self.dilation_radius_unet) if self.dilation_radius_unet > 0 else unet_cloud
             [cloud_objects, cloud_regions] = segment_cloud_objects(cloud_layer, min_area=min_area, exclude=(unet_cloud==0), exclude_method = 'all')
             del unet_cloud
             # after postprocessing
@@ -615,7 +619,7 @@ class Fmask(object):
                 print(">>> postprocessing with morphology&unet-based elimination")
             # Use dilated version only if needed
             unet_cloud = self.cloud.first
-            unet_cloud = utils.dilate(unet_cloud, radius=dilation) if dilation > 0 else unet_cloud
+            unet_cloud = utils.dilate(unet_cloud, radius=self.dilation_radius_unet) if self.dilation_radius_unet > 0 else unet_cloud
              # get the potential false positive cloud pixels
             pfpl = self.mask_potential_bright_surface()
             # erode the false positive cloud pixels
