@@ -2,7 +2,7 @@
 Author: Shi Qiu, Zhe Zhu
 Email: shi.qiu@uconn.edu, zhe@uconn.edu
 Affiliation: University of Connecticut
-Date: 2025-05-07
+Date: 2025-05-06
 Version: 5.0.0
 License: MIT
 
@@ -65,7 +65,8 @@ Requirements:
 - 20GB memory for running the package
 
 Changelog:
-- 5.0.0 (2025-05-7): Initial release.
+- 5.0.0 (2025-06-05): A 100-pixel-dilated U-Net layer is applied only for Landsat data postprocessing, as omission errors frequently occur near path/row boundaries. These errors are not observed in Sentinel-2 data, so the dilation is not applied there.
+- 5.0.0 (2025-05-07): Initial release.
 """
 
 import os
@@ -447,7 +448,6 @@ def fmask_lpu(path_image, dcloud=0, dshadow=5, dsnow = 0, destination = None, sk
                                     path = os.path.join(fmask.image.destination, fmask.image.name + '_Tirs1.png'))
         fmask.mask_cloud()
         fmask.mask_shadow(postprocess='none', min_area=0, potential = "flood", buffer2connect = 3) # no postprocessing for the cloud mask when unet is output
-        
         fmask.save_mask(endname=endname) # save the mask
         if metadata:
             fmask.save_model_metadata(os.path.join(fmask.image.destination, fmask.image.name + f'_{endname}_meta.csv'), running_time=time.perf_counter() - time_start)
